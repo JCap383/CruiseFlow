@@ -85,7 +85,7 @@ export function Settings() {
 
   return (
     <div className="flex flex-col">
-      <div className="px-4 pt-4 pb-3 border-b border-cruise-border">
+      <div className="px-4 pt-2 pb-2 border-b border-cruise-border">
         <h1 className="text-lg font-bold">Settings</h1>
       </div>
 

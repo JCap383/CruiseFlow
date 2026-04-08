@@ -43,11 +43,11 @@ export function DailySchedule() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 bg-cruise-bg/95 backdrop-blur-md z-10 px-4 pt-4 pb-3 border-b border-cruise-border">
+      <div className="sticky top-0 bg-cruise-bg/95 backdrop-blur-md z-10 px-4 pt-2 pb-2 border-b border-cruise-border">
         <h1 className="text-lg font-bold text-center text-cruise-text">
           {cruise?.name ?? 'CruiseFlow'}
         </h1>
-        <div className="flex items-center justify-between mt-2">
+        <div className="flex items-center justify-between mt-1">
           <button
             onClick={() => goDay('prev')}
             disabled={!canGoPrev}

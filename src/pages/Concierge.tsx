@@ -101,7 +101,7 @@ export function Concierge() {
   return (
     <div className="flex flex-col h-full max-w-lg mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-cruise-border shrink-0">
+      <div className="flex items-center gap-3 px-4 pt-2 pb-2 border-b border-cruise-border shrink-0">
         <button onClick={() => navigate(-1)} className="text-cruise-muted p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>

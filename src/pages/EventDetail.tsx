@@ -44,7 +44,7 @@ export function EventDetail() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-cruise-border">
+      <div className="flex items-center gap-3 px-4 pt-2 pb-2 border-b border-cruise-border">
         <button onClick={() => navigate(-1)} className="text-cruise-muted p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>

@@ -26,7 +26,7 @@ export function AddEditEvent() {
   // Show loading state while fetching event data in edit mode
   if (isEdit && existingEvent === undefined) {
     return (
-      <div className="p-4">
+      <div className="px-4 pt-2 pb-4">
         <h1 className="text-lg font-bold mb-4">Edit Event</h1>
         <p className="text-cruise-muted text-sm">Loading...</p>
       </div>
@@ -45,7 +45,7 @@ export function AddEditEvent() {
   };
 
   return (
-    <div className="p-4">
+    <div className="px-4 pt-2 pb-4">
       <h1 className="text-lg font-bold mb-4">
         {existingEvent ? 'Edit Event' : 'New Event'}
       </h1>

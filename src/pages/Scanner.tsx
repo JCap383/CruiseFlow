@@ -191,7 +191,7 @@ export function Scanner() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-cruise-border flex items-center justify-between">
+      <div className="px-4 pt-2 pb-2 border-b border-cruise-border flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold">Scan Planner</h1>
           <p className="text-sm text-cruise-muted">
