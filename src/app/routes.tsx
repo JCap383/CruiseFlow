@@ -8,6 +8,7 @@ import { EventDetail } from '@/pages/EventDetail';
 import { Onboarding } from '@/pages/Onboarding';
 import { Scanner } from '@/pages/Scanner';
 import { Concierge } from '@/pages/Concierge';
+import { Memories } from '@/pages/Memories';
 
 export const router = createBrowserRouter([
   {
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <DailySchedule /> },
       { path: '/scanner', element: <Scanner /> },
+      { path: '/memories', element: <Memories /> },
       { path: '/family', element: <FamilyDashboard /> },
       { path: '/settings', element: <Settings /> },
       { path: '/event/new', element: <AddEditEvent /> },

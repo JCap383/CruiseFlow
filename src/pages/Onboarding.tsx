@@ -7,6 +7,7 @@ import { createCruise } from '@/hooks/useCruise';
 import { addMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
 import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
+import { getKnownShips } from '@/db/seed';
 
 interface MemberDraft {
   name: string;
@@ -98,13 +99,31 @@ export function Onboarding() {
             value={cruiseName}
             onChange={(e) => setCruiseName(e.target.value)}
           />
-          <Input
-            id="shipName"
-            label="Ship name"
-            placeholder="e.g. Oasis of the Seas"
-            value={shipName}
-            onChange={(e) => setShipName(e.target.value)}
-          />
+          <div>
+            <Input
+              id="shipName"
+              label="Ship name"
+              placeholder="e.g. NCL Prima"
+              value={shipName}
+              onChange={(e) => setShipName(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {getKnownShips().map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setShipName(name)}
+                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                    shipName === name
+                      ? 'bg-ocean-500 text-white border-ocean-500'
+                      : 'border-cruise-border text-cruise-muted bg-cruise-card'
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="startDate"

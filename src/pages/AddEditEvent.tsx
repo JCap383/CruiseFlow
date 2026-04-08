@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '@/stores/appStore';
 import { useEvent, addEvent, updateEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
+import { useCruise } from '@/hooks/useCruise';
 import { EventForm } from '@/components/events/EventForm';
 import type { CruiseEvent } from '@/types';
 
@@ -13,6 +14,7 @@ export function AddEditEvent() {
   const isEdit = id !== 'new' && id !== undefined;
   const existingEvent = useEvent(isEdit ? id : undefined);
   const members = useFamily();
+  const cruise = useCruise(activeCruiseId);
 
   // Redirect to onboarding if no cruise — done in effect, not during render
   useEffect(() => {
@@ -54,6 +56,7 @@ export function AddEditEvent() {
         initialData={existingEvent ?? undefined}
         members={members}
         cruiseId={activeCruiseId}
+        shipName={cruise?.shipName ?? ''}
         date={existingEvent?.date ?? selectedDate}
         onSubmit={handleSubmit}
         onCancel={() => navigate(-1)}

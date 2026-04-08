@@ -27,6 +27,7 @@ interface EventFormProps {
   initialData?: CruiseEvent;
   members: FamilyMember[];
   cruiseId: string;
+  shipName: string;
   date: string;
   onSubmit: (data: Omit<CruiseEvent, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
@@ -88,6 +89,7 @@ export function EventForm({
   initialData,
   members,
   cruiseId,
+  shipName,
   date,
   onSubmit,
   onCancel,
@@ -110,7 +112,24 @@ export function EventForm({
   const [showVenuePicker, setShowVenuePicker] = useState(false);
   const [venueFilter, setVenueFilter] = useState('');
 
-  const venues = useLiveQuery(() => db.venues.toArray(), [], []);
+  const venues = useLiveQuery(
+    async () => {
+      if (!shipName) return db.venues.toArray();
+      const normalized = shipName.toLowerCase().trim();
+      // Try exact match first
+      const exact = await db.venues.where('shipName').equalsIgnoreCase(shipName).toArray();
+      if (exact.length > 0) return exact;
+      // Fuzzy: match if either contains the other
+      const all = await db.venues.toArray();
+      const fuzzy = all.filter((v) => {
+        const vn = v.shipName.toLowerCase();
+        return vn.includes(normalized) || normalized.includes(vn);
+      });
+      return fuzzy.length > 0 ? fuzzy : all;
+    },
+    [shipName],
+    [],
+  );
 
   // Group venues by category
   const groupedVenues = useMemo(() => {
@@ -195,6 +214,7 @@ export function EventForm({
       notes,
       memberIds: selectedMembers,
       reminderMinutes: null,
+      photos: initialData?.photos ?? [],
     });
   };
 

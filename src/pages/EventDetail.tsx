@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -6,14 +7,43 @@ import {
   Edit2,
   Trash2,
   AlertTriangle,
+  Camera,
+  X,
 } from 'lucide-react';
-import { useEvent, useEventsForDay, deleteEvent } from '@/hooks/useEvents';
+import { nanoid } from 'nanoid';
+import { useEvent, useEventsForDay, updateEvent, deleteEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
 import { useEventConflicts } from '@/hooks/useConflicts';
 import { CATEGORY_CONFIG } from '@/types';
+import type { EventPhoto } from '@/types';
 import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { Button } from '@/components/ui/Button';
+
+function compressPhoto(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = (h / w) * MAX; w = MAX; }
+          else { w = (w / h) * MAX; h = MAX; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export function EventDetail() {
   const navigate = useNavigate();
@@ -22,6 +52,7 @@ export function EventDetail() {
   const members = useFamily();
   const dayEvents = useEventsForDay(event?.date);
   const conflicts = useEventConflicts(id ?? '', dayEvents);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   if (!event) {
     return (
@@ -35,6 +66,30 @@ export function EventDetail() {
   const assignedMembers = members.filter((m) =>
     event.memberIds.includes(m.id),
   );
+  const photos = event.photos ?? [];
+
+  const handleAddPhotos = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const newPhotos: EventPhoto[] = [];
+    for (const file of Array.from(files)) {
+      const dataUrl = await compressPhoto(file);
+      newPhotos.push({
+        id: nanoid(),
+        dataUrl,
+        caption: '',
+        addedAt: Date.now(),
+      });
+    }
+    await updateEvent(event.id, {
+      photos: [...photos, ...newPhotos],
+    });
+  };
+
+  const handleDeletePhoto = async (photoId: string) => {
+    await updateEvent(event.id, {
+      photos: photos.filter((p) => p.id !== photoId),
+    });
+  };
 
   const handleDelete = async () => {
     await deleteEvent(event.id);
@@ -106,11 +161,65 @@ export function EventDetail() {
         {event.notes && (
           <div>
             <span className="text-sm text-cruise-muted block mb-1">Notes</span>
-            <p className="text-cruise-text bg-cruise-card rounded-xl p-3 border border-cruise-border">
+            <p className="text-cruise-text bg-cruise-card rounded-xl p-3 border border-cruise-border whitespace-pre-wrap">
               {event.notes}
             </p>
           </div>
         )}
+
+        {/* Photos */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-cruise-muted">
+              Photos {photos.length > 0 && `(${photos.length})`}
+            </span>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs text-ocean-400 bg-ocean-400/10 px-3 py-1.5 rounded-full"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              Add Photo
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => handleAddPhotos(e.target.files)}
+            />
+          </div>
+
+          {photos.length > 0 ? (
+            <div className="grid grid-cols-3 gap-2">
+              {photos.map((photo) => (
+                <div key={photo.id} className="relative aspect-square rounded-xl overflow-hidden bg-cruise-surface">
+                  <img
+                    src={photo.dataUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeletePhoto(photo.id);
+                    }}
+                    className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                  >
+                    <X className="w-3.5 h-3.5 text-white" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="w-full border-2 border-dashed border-cruise-border rounded-xl p-6 text-center text-cruise-muted/50 text-sm"
+            >
+              Tap to add photos from this event
+            </button>
+          )}
+        </div>
 
         {/* Conflicts */}
         {conflicts.length > 0 && (

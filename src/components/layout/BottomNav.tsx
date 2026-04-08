@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { CalendarDays, Users, ScanLine, Settings } from 'lucide-react';
+import { CalendarDays, ScanLine, BookOpen, Users, Settings } from 'lucide-react';
 
 const tabs = [
   { to: '/', icon: CalendarDays, label: 'Schedule' },
   { to: '/scanner', icon: ScanLine, label: 'Scanner' },
+  { to: '/memories', icon: BookOpen, label: 'Memories' },
   { to: '/family', icon: Users, label: 'Family' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];
@@ -17,7 +18,7 @@ export function BottomNav() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 py-2.5 px-4 text-xs transition-colors ${
+              `flex flex-col items-center gap-0.5 py-2 px-2 text-[10px] transition-colors ${
                 isActive ? 'text-ocean-400' : 'text-cruise-muted'
               }`
             }

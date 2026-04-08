@@ -39,3 +39,12 @@ export function isUpcoming(date: string, startTime: string): boolean {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   return timeToMinutes(startTime) > nowMinutes;
 }
+
+export function isPast(date: string, endTime: string): boolean {
+  const now = new Date();
+  const today = format(now, 'yyyy-MM-dd');
+  if (date < today) return true;
+  if (date > today) return false;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  return timeToMinutes(endTime) <= nowMinutes;
+}

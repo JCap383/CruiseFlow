@@ -180,6 +180,7 @@ export function Scanner() {
         notes: event.notes || '',
         memberIds: [],
         reminderMinutes: null,
+        photos: [],
       });
     }
 

@@ -25,4 +25,21 @@ db.version(2).stores({
   await tx.table('venues').clear();
 });
 
+// v3: add shipName index to venues for per-ship filtering, add photos to events
+db.version(3).stores({
+  cruises: 'id, startDate',
+  members: 'id, cruiseId',
+  events: 'id, cruiseId, date, startTime, [cruiseId+date]',
+  venues: 'id, shipName, deck, category, [shipName+category]',
+}).upgrade(async (tx) => {
+  // Clear venues to re-seed with ship-specific data
+  await tx.table('venues').clear();
+  // Add empty photos array to existing events
+  await tx.table('events').toCollection().modify((event: CruiseEvent) => {
+    if (!event.photos) {
+      event.photos = [];
+    }
+  });
+});
+
 export { db };

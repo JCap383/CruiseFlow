@@ -25,6 +25,13 @@ export interface FamilyMember {
   isChild: boolean;
 }
 
+export interface EventPhoto {
+  id: string;
+  dataUrl: string; // base64 data URL
+  caption: string;
+  addedAt: number;
+}
+
 export interface CruiseEvent {
   id: string;
   cruiseId: string;
@@ -38,12 +45,14 @@ export interface CruiseEvent {
   notes: string;
   memberIds: string[];
   reminderMinutes: number | null;
+  photos: EventPhoto[];
   createdAt: number;
   updatedAt: number;
 }
 
 export interface Venue {
   id: string;
+  shipName: string;
   name: string;
   deck: number;
   category: string;
