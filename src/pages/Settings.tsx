@@ -1,0 +1,259 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Ship, Plus, X, Trash2, Key, Eye, EyeOff } from 'lucide-react';
+import { useCruise } from '@/hooks/useCruise';
+import { useFamily, addMember, deleteMember } from '@/hooks/useFamily';
+import { useAppStore } from '@/stores/appStore';
+import { updateCruise, deleteCruise } from '@/hooks/useCruise';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { MemberAvatar } from '@/components/family/MemberAvatar';
+import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
+
+export function Settings() {
+  const navigate = useNavigate();
+  const activeCruiseId = useAppStore((s) => s.activeCruiseId);
+  const setActiveCruise = useAppStore((s) => s.setActiveCruise);
+  const apiKey = useAppStore((s) => s.apiKey);
+  const setApiKey = useAppStore((s) => s.setApiKey);
+  const cruise = useCruise(activeCruiseId);
+  const members = useFamily();
+
+  const [newMemberName, setNewMemberName] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [editingCruise, setEditingCruise] = useState(false);
+  const [cruiseName, setCruiseName] = useState('');
+  const [shipName, setShipName] = useState('');
+
+  const handleAddMember = async () => {
+    if (!newMemberName.trim() || !activeCruiseId) return;
+    await addMember({
+      cruiseId: activeCruiseId,
+      name: newMemberName.trim(),
+      emoji: MEMBER_EMOJIS[members.length % MEMBER_EMOJIS.length]!,
+      color: MEMBER_COLORS[members.length % MEMBER_COLORS.length]!,
+      isChild: false,
+    });
+    setNewMemberName('');
+  };
+
+  const handleDeleteMember = async (id: string) => {
+    await deleteMember(id);
+  };
+
+  const handleEditCruise = () => {
+    if (cruise) {
+      setCruiseName(cruise.name);
+      setShipName(cruise.shipName);
+      setEditingCruise(true);
+    }
+  };
+
+  const handleSaveCruise = async () => {
+    if (activeCruiseId) {
+      await updateCruise(activeCruiseId, {
+        name: cruiseName,
+        shipName: shipName,
+      });
+      setEditingCruise(false);
+    }
+  };
+
+  const handleDeleteCruise = async () => {
+    if (activeCruiseId) {
+      await deleteCruise(activeCruiseId);
+      setActiveCruise(null);
+      navigate('/onboarding');
+    }
+  };
+
+  const handleNewCruise = () => {
+    setActiveCruise(null);
+    navigate('/onboarding');
+  };
+
+  if (!cruise) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-cruise-muted">No active cruise</p>
+        <Button onClick={handleNewCruise} className="mt-4">
+          Set Up Cruise
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div className="px-4 pt-4 pb-3 border-b border-cruise-border">
+        <h1 className="text-lg font-bold">Settings</h1>
+      </div>
+
+      <div className="p-4 flex flex-col gap-6">
+        {/* Cruise info */}
+        <section>
+          <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+            Cruise
+          </h2>
+          {editingCruise ? (
+            <div className="flex flex-col gap-3 bg-cruise-card rounded-2xl p-4 border border-cruise-border">
+              <Input
+                id="editCruiseName"
+                label="Cruise name"
+                value={cruiseName}
+                onChange={(e) => setCruiseName(e.target.value)}
+              />
+              <Input
+                id="editShipName"
+                label="Ship name"
+                value={shipName}
+                onChange={(e) => setShipName(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setEditingCruise(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveCruise} className="flex-1">
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={handleEditCruise}
+              className="w-full bg-cruise-card rounded-2xl p-4 border border-cruise-border text-left active:bg-cruise-border transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-ocean-500/20 rounded-xl flex items-center justify-center">
+                  <Ship className="w-5 h-5 text-ocean-400" />
+                </div>
+                <div>
+                  <p className="font-semibold">{cruise.name}</p>
+                  <p className="text-sm text-cruise-muted">{cruise.shipName}</p>
+                  <p className="text-xs text-cruise-muted mt-0.5">
+                    {cruise.startDate} to {cruise.endDate}
+                  </p>
+                </div>
+              </div>
+            </button>
+          )}
+        </section>
+
+        {/* Family members */}
+        <section>
+          <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+            Family Members
+          </h2>
+          <div className="flex flex-col gap-2">
+            {members.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center gap-3 bg-cruise-card rounded-xl px-4 py-3 border border-cruise-border"
+              >
+                <MemberAvatar member={m} size="sm" />
+                <span className="flex-1 font-medium">{m.name}</span>
+                {m.isChild && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-400">
+                    Child
+                  </span>
+                )}
+                <button
+                  onClick={() => handleDeleteMember(m.id)}
+                  className="text-cruise-muted p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <div className="flex gap-2 mt-1">
+              <Input
+                id="newMember"
+                placeholder="Add member..."
+                value={newMemberName}
+                onChange={(e) => setNewMemberName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddMember();
+                  }
+                }}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleAddMember}
+                variant="secondary"
+                className="shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* API Key */}
+        <section>
+          <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+            AI Features
+          </h2>
+          <div className="bg-cruise-card rounded-2xl p-4 border border-cruise-border flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-sm text-cruise-muted">
+              <Key className="w-4 h-4" />
+              <span>Google Gemini API Key</span>
+            </div>
+            <p className="text-xs text-cruise-muted/70">
+              Free from aistudio.google.com/apikey — required for planner
+              scanning and cruise concierge. Stored locally on this device only.
+            </p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="AIza..."
+                  className="w-full rounded-xl bg-cruise-surface border border-cruise-border px-4 py-2.5 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500 transition-colors pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-cruise-muted"
+                >
+                  {showApiKey ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+            {apiKey && (
+              <p className="text-xs text-emerald-400">Key saved</p>
+            )}
+          </div>
+        </section>
+
+        {/* Danger zone */}
+        <section>
+          <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+            Danger Zone
+          </h2>
+          <div className="flex flex-col gap-2">
+            <Button variant="secondary" onClick={handleNewCruise}>
+              Start New Cruise
+            </Button>
+            <Button variant="danger" onClick={handleDeleteCruise}>
+              <span className="flex items-center justify-center gap-2">
+                <Trash2 className="w-4 h-4" />
+                Delete This Cruise
+              </span>
+            </Button>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}

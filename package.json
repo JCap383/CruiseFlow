@@ -1,0 +1,32 @@
+{
+  "name": "cruiseflow",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0",
+    "zustand": "^5.0.5",
+    "dexie": "^4.0.11",
+    "dexie-react-hooks": "^1.1.7",
+    "lucide-react": "^0.511.0",
+    "date-fns": "^4.1.0",
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.5.2",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-pwa": "^1.0.0",
+    "tailwindcss": "^4.1.7",
+    "@tailwindcss/vite": "^4.1.7"
+  }
+}
