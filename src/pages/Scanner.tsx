@@ -47,22 +47,51 @@ export function Scanner() {
   const [error, setError] = useState('');
   const [addedCount, setAddedCount] = useState(0);
 
-  const handleFiles = useCallback((files: FileList | null) => {
-    if (!files) return;
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const [header, data] = dataUrl.split(',');
-        const mediaType = header?.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+  // Resize + compress images to stay well within Gemini's token limits.
+  // Phone cameras shoot 12MP+ photos; a cruise planner only needs ~1500px
+  // max dimension to be fully readable by the vision model.
+  const compressImage = useCallback(
+    (file: File): Promise<{ data: string; preview: string }> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const MAX = 1536; // px — sweet spot for readability vs tokens
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            const scale = MAX / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+          URL.revokeObjectURL(url);
+          const base64 = dataUrl.split(',')[1]!;
+          resolve({ data: base64, preview: dataUrl });
+        };
+        img.src = url;
+      });
+    },
+    [],
+  );
+
+  const handleFiles = useCallback(
+    (files: FileList | null) => {
+      if (!files) return;
+      Array.from(files).forEach(async (file) => {
+        const { data, preview } = await compressImage(file);
         setImages((prev) => [
           ...prev,
-          { data: data!, mediaType, preview: dataUrl },
+          { data, mediaType: 'image/jpeg', preview },
         ]);
-      };
-      reader.readAsDataURL(file);
-    });
-  }, []);
+      });
+    },
+    [compressImage],
+  );
 
   const removeImage = (idx: number) => {
     setImages((prev) => prev.filter((_, i) => i !== idx));
