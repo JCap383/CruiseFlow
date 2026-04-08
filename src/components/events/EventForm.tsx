@@ -381,7 +381,14 @@ export function EventForm({
           label="Start"
           type="time"
           value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
+          onChange={(e) => {
+            const newStart = e.target.value;
+            setStartTime(newStart);
+            // Auto-set end time to start + 1 hour
+            const [h, m] = newStart.split(':').map(Number);
+            const endH = Math.min((h ?? 0) + 1, 23);
+            setEndTime(`${endH.toString().padStart(2, '0')}:${(m ?? 0).toString().padStart(2, '0')}`);
+          }}
         />
         <Input
           id="endTime"
