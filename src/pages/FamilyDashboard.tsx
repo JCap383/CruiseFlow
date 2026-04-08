@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { Plus, Clock, MapPin } from 'lucide-react';
 import { useFamily } from '@/hooks/useFamily';
 import { useEventsForDay } from '@/hooks/useEvents';
+import { useAppStore } from '@/stores/appStore';
 import { MemberAvatar } from '@/components/family/MemberAvatar';
 import { CATEGORY_CONFIG } from '@/types';
 import {
@@ -15,10 +16,14 @@ import {
 
 export function FamilyDashboard() {
   const navigate = useNavigate();
+  const selectedDate = useAppStore((s) => s.selectedDate);
   const members = useFamily();
   const events = useEventsForDay();
 
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const dateLabel = format(
+    parse(selectedDate, 'yyyy-MM-dd', new Date()),
+    'EEEE, MMM d',
+  );
 
   const memberStatus = useMemo(() => {
     return members.map((member) => {
@@ -32,7 +37,7 @@ export function FamilyDashboard() {
 
       return { member, current, upcoming, totalEvents: myEvents.length };
     });
-  }, [members, events, today]);
+  }, [members, events]);
 
   return (
     <div className="flex flex-col">
@@ -40,7 +45,7 @@ export function FamilyDashboard() {
       <div className="px-4 pt-4 pb-3 border-b border-cruise-border">
         <h1 className="text-lg font-bold">Family</h1>
         <p className="text-sm text-cruise-muted mt-0.5">
-          {format(new Date(), 'EEEE, MMM d')}
+          {dateLabel}
         </p>
       </div>
 

@@ -43,16 +43,32 @@ export function EventForm({
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
     initialData?.memberIds ?? members.map((m) => m.id),
   );
+  const [initialized, setInitialized] = useState(!!initialData);
 
   const venues = useLiveQuery(() => db.venues.toArray(), [], []);
 
+  // Sync form state when initialData loads asynchronously (edit mode)
+  useEffect(() => {
+    if (initialData && !initialized) {
+      setTitle(initialData.title);
+      setStartTime(initialData.startTime);
+      setEndTime(initialData.endTime);
+      setCategory(initialData.category);
+      setVenue(initialData.venue);
+      setDeck(initialData.deck?.toString() ?? '');
+      setNotes(initialData.notes);
+      setSelectedMembers(initialData.memberIds);
+      setInitialized(true);
+    }
+  }, [initialData, initialized]);
+
   // Auto-fill deck when venue is selected from known list
   useEffect(() => {
-    if (venue) {
+    if (venue && initialized) {
       const found = venues.find((v) => v.name === venue);
       if (found) setDeck(found.deck.toString());
     }
-  }, [venue, venues]);
+  }, [venue, venues, initialized]);
 
   const toggleMember = (id: string) => {
     setSelectedMembers((prev) =>
