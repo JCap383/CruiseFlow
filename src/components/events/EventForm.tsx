@@ -1,9 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import {
+  Utensils,
+  Music,
+  Compass,
+  Baby,
+  Ticket,
+  User,
+  Bell,
+  ChevronDown,
+  MapPin,
+  Wine,
+  Waves,
+  Dumbbell,
+  Sparkles,
+  Wrench,
+} from 'lucide-react';
 import type { CruiseEvent, EventCategory, FamilyMember } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
 import { Button } from '@/components/ui/Button';
-import { Input, TextArea, Select } from '@/components/ui/Input';
+import { Input, TextArea } from '@/components/ui/Input';
 import { MemberAvatar } from '@/components/family/MemberAvatar';
 import { db } from '@/db/database';
 
@@ -16,10 +32,57 @@ interface EventFormProps {
   onCancel: () => void;
 }
 
-const CATEGORY_OPTIONS = Object.entries(CATEGORY_CONFIG).map(([value, c]) => ({
-  value,
-  label: c.label,
-}));
+const CATEGORY_ICONS: Record<EventCategory, typeof Utensils> = {
+  dining: Utensils,
+  entertainment: Music,
+  excursion: Compass,
+  'kids-club': Baby,
+  reservation: Ticket,
+  personal: User,
+  reminder: Bell,
+};
+
+const VENUE_CATEGORY_ICONS: Record<string, typeof Utensils> = {
+  dining: Utensils,
+  bar: Wine,
+  entertainment: Music,
+  kids: Baby,
+  pool: Waves,
+  activity: Dumbbell,
+  spa: Sparkles,
+  service: Wrench,
+};
+
+const VENUE_CATEGORY_LABELS: Record<string, string> = {
+  dining: 'Dining',
+  bar: 'Bars',
+  entertainment: 'Entertainment',
+  kids: 'Kids',
+  pool: 'Pools',
+  activity: 'Activities',
+  spa: 'Spa & Fitness',
+  service: 'Services',
+};
+
+// Smart time defaults based on category
+function getDefaultTimes(category: EventCategory): [string, string] {
+  switch (category) {
+    case 'dining':
+      return ['18:00', '19:30'];
+    case 'entertainment':
+      return ['20:00', '21:30'];
+    case 'excursion':
+      return ['08:00', '12:00'];
+    case 'kids-club':
+      return ['09:00', '12:00'];
+    case 'reservation':
+      return ['14:00', '15:00'];
+    case 'reminder':
+      return ['12:00', '12:15'];
+    default:
+      return ['12:00', '13:00'];
+  }
+}
 
 export function EventForm({
   initialData,
@@ -33,7 +96,7 @@ export function EventForm({
   const [startTime, setStartTime] = useState(initialData?.startTime ?? '12:00');
   const [endTime, setEndTime] = useState(initialData?.endTime ?? '13:00');
   const [category, setCategory] = useState<EventCategory>(
-    initialData?.category ?? 'personal',
+    initialData?.category ?? 'dining',
   );
   const [venue, setVenue] = useState(initialData?.venue ?? '');
   const [deck, setDeck] = useState<string>(
@@ -44,8 +107,35 @@ export function EventForm({
     initialData?.memberIds ?? members.map((m) => m.id),
   );
   const [initialized, setInitialized] = useState(!!initialData);
+  const [showVenuePicker, setShowVenuePicker] = useState(false);
+  const [venueFilter, setVenueFilter] = useState('');
 
   const venues = useLiveQuery(() => db.venues.toArray(), [], []);
+
+  // Group venues by category
+  const groupedVenues = useMemo(() => {
+    const groups: Record<string, { name: string; deck: number }[]> = {};
+    const order = ['dining', 'bar', 'entertainment', 'kids', 'pool', 'activity', 'spa', 'service'];
+    for (const cat of order) {
+      groups[cat] = [];
+    }
+    for (const v of venues) {
+      if (!groups[v.category]) groups[v.category] = [];
+      groups[v.category]!.push({ name: v.name, deck: v.deck });
+    }
+    return groups;
+  }, [venues]);
+
+  // Filtered venues for search
+  const filteredVenues = useMemo(() => {
+    if (!venueFilter) return null;
+    const q = venueFilter.toLowerCase();
+    return venues.filter(
+      (v) =>
+        v.name.toLowerCase().includes(q) ||
+        v.category.toLowerCase().includes(q),
+    );
+  }, [venues, venueFilter]);
 
   // Sync form state when initialData loads asynchronously (edit mode)
   useEffect(() => {
@@ -62,13 +152,26 @@ export function EventForm({
     }
   }, [initialData, initialized]);
 
-  // Auto-fill deck when venue is selected from known list
-  useEffect(() => {
-    if (venue && initialized) {
-      const found = venues.find((v) => v.name === venue);
-      if (found) setDeck(found.deck.toString());
+  const selectVenue = (name: string, venueDeck: number) => {
+    setVenue(name);
+    setDeck(venueDeck.toString());
+    setShowVenuePicker(false);
+    setVenueFilter('');
+    // Auto-fill title if empty
+    if (!title) {
+      setTitle(name);
     }
-  }, [venue, venues, initialized]);
+  };
+
+  const selectCategory = (cat: EventCategory) => {
+    setCategory(cat);
+    // Update times if user hasn't manually changed them yet, and this is a new event
+    if (!initialData) {
+      const [s, e] = getDefaultTimes(cat);
+      setStartTime(s);
+      setEndTime(e);
+    }
+  };
 
   const toggleMember = (id: string) => {
     setSelectedMembers((prev) =>
@@ -97,16 +200,161 @@ export function EventForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {/* ── Category chips ─────────────────────────────────────────── */}
+      <div>
+        <span className="text-sm text-cruise-muted block mb-2">Category</span>
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+          {(Object.keys(CATEGORY_CONFIG) as EventCategory[]).map((cat) => {
+            const config = CATEGORY_CONFIG[cat];
+            const Icon = CATEGORY_ICONS[cat];
+            const active = category === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => selectCategory(cat)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
+                  active
+                    ? 'text-white scale-[1.02]'
+                    : 'bg-cruise-card border border-cruise-border text-cruise-muted'
+                }`}
+                style={active ? { backgroundColor: config.color } : undefined}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {config.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Venue picker ───────────────────────────────────────────── */}
+      <div>
+        <span className="text-sm text-cruise-muted block mb-2">Venue</span>
+        {!showVenuePicker ? (
+          <button
+            type="button"
+            onClick={() => setShowVenuePicker(true)}
+            className="w-full flex items-center gap-2 rounded-xl bg-cruise-card border border-cruise-border px-4 py-2.5 text-left transition-colors"
+          >
+            <MapPin className="w-4 h-4 text-cruise-muted shrink-0" />
+            <span className={venue ? 'text-cruise-text' : 'text-cruise-muted/50'}>
+              {venue || 'Select a venue...'}
+            </span>
+            {venue && deck && (
+              <span className="text-xs text-cruise-muted ml-auto">Deck {deck}</span>
+            )}
+            <ChevronDown className="w-4 h-4 text-cruise-muted shrink-0 ml-auto" />
+          </button>
+        ) : (
+          <div className="rounded-xl bg-cruise-card border border-cruise-border overflow-hidden">
+            {/* Search */}
+            <div className="p-2 border-b border-cruise-border">
+              <input
+                type="text"
+                placeholder="Search venues..."
+                value={venueFilter}
+                onChange={(e) => setVenueFilter(e.target.value)}
+                autoFocus
+                className="w-full bg-cruise-surface rounded-lg px-3 py-2 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none"
+              />
+            </div>
+
+            {/* Venue list */}
+            <div className="max-h-64 overflow-y-auto">
+              {/* Custom input option */}
+              {venueFilter && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVenue(venueFilter);
+                    setShowVenuePicker(false);
+                    setVenueFilter('');
+                    if (!title) setTitle(venueFilter);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-ocean-400 border-b border-cruise-border hover:bg-cruise-surface"
+                >
+                  Use "{venueFilter}" as venue
+                </button>
+              )}
+
+              {filteredVenues ? (
+                // Search results
+                filteredVenues.length === 0 ? (
+                  <div className="px-4 py-3 text-sm text-cruise-muted">
+                    No venues match "{venueFilter}"
+                  </div>
+                ) : (
+                  filteredVenues.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => selectVenue(v.name, v.deck)}
+                      className="w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-cruise-surface active:bg-cruise-border transition-colors"
+                    >
+                      <span className="text-cruise-text">{v.name}</span>
+                      <span className="text-xs text-cruise-muted">Deck {v.deck}</span>
+                    </button>
+                  ))
+                )
+              ) : (
+                // Grouped by category
+                Object.entries(groupedVenues).map(([cat, catVenues]) => {
+                  if (catVenues.length === 0) return null;
+                  const CatIcon = VENUE_CATEGORY_ICONS[cat] ?? MapPin;
+                  return (
+                    <div key={cat}>
+                      <div className="px-4 py-2 bg-cruise-surface flex items-center gap-2 sticky top-0">
+                        <CatIcon className="w-3.5 h-3.5 text-cruise-muted" />
+                        <span className="text-xs font-medium text-cruise-muted uppercase tracking-wider">
+                          {VENUE_CATEGORY_LABELS[cat] ?? cat}
+                        </span>
+                      </div>
+                      {catVenues.map((v) => (
+                        <button
+                          key={v.name}
+                          type="button"
+                          onClick={() => selectVenue(v.name, v.deck)}
+                          className="w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-cruise-surface active:bg-cruise-border transition-colors"
+                        >
+                          <span className="text-cruise-text">{v.name}</span>
+                          <span className="text-xs text-cruise-muted">
+                            Deck {v.deck}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Close */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowVenuePicker(false);
+                  setVenueFilter('');
+                }}
+                className="w-full text-center py-2.5 text-sm text-cruise-muted border-t border-cruise-border"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Title ──────────────────────────────────────────────────── */}
       <Input
         id="title"
         label="Event title"
-        placeholder="e.g. Dinner at Windjammer"
+        placeholder="e.g. Dinner, Ice show, Pool time..."
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        autoFocus
         required
       />
 
+      {/* ── Time ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-3">
         <Input
           id="startTime"
@@ -124,56 +372,7 @@ export function EventForm({
         />
       </div>
 
-      <Select
-        id="category"
-        label="Category"
-        options={CATEGORY_OPTIONS}
-        value={category}
-        onChange={(e) => setCategory(e.target.value as EventCategory)}
-      />
-
-      {/* Venue - datalist for autocomplete from known venues */}
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="venue" className="text-sm text-cruise-muted">
-          Venue
-        </label>
-        <input
-          id="venue"
-          list="venue-list"
-          className="rounded-xl bg-cruise-card border border-cruise-border px-4 py-2.5 text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500 transition-colors"
-          placeholder="e.g. Main Dining Room"
-          value={venue}
-          onChange={(e) => setVenue(e.target.value)}
-        />
-        <datalist id="venue-list">
-          {venues.map((v) => (
-            <option key={v.id} value={v.name}>
-              Deck {v.deck}
-            </option>
-          ))}
-        </datalist>
-      </div>
-
-      <Input
-        id="deck"
-        label="Deck"
-        type="number"
-        min="1"
-        max="20"
-        placeholder="e.g. 5"
-        value={deck}
-        onChange={(e) => setDeck(e.target.value)}
-      />
-
-      <TextArea
-        id="notes"
-        label="Notes"
-        placeholder="Any details..."
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
-
-      {/* Family member selector */}
+      {/* ── Family member selector ─────────────────────────────────── */}
       {members.length > 0 && (
         <div className="flex flex-col gap-2">
           <span className="text-sm text-cruise-muted">Who's going?</span>
@@ -192,7 +391,17 @@ export function EventForm({
         </div>
       )}
 
-      <div className="flex gap-3 mt-2">
+      {/* ── Notes (collapsed by default) ───────────────────────────── */}
+      <TextArea
+        id="notes"
+        label="Notes (optional)"
+        placeholder="Dress code, confirmation #, etc."
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+      />
+
+      {/* ── Actions ────────────────────────────────────────────────── */}
+      <div className="flex gap-3 mt-1">
         <Button
           type="button"
           variant="secondary"
