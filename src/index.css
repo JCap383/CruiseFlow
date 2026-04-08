@@ -36,6 +36,7 @@ html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
+  padding-top: env(safe-area-inset-top);
 }
 
 body {
@@ -46,6 +47,10 @@ body {
 }
 
 /* Safe area padding for notched devices */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
 .safe-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }

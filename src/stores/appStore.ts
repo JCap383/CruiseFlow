@@ -40,7 +40,7 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 
 export const useAppStore = create<AppState>((set) => ({
   activeCruiseId: loadFromStorage<string | null>('cruiseflow-cruise-id', null),
-  selectedDate: format(new Date(), 'yyyy-MM-dd'),
+  selectedDate: localStorage.getItem('cruiseflow-selected-date') ?? format(new Date(), 'yyyy-MM-dd'),
   apiKey: localStorage.getItem('cruiseflow-api-key') ?? '',
   scanResults: loadFromStorage<ScanResult[]>('cruiseflow-scan-results', []),
   setActiveCruise: (id) => {
@@ -51,7 +51,10 @@ export const useAppStore = create<AppState>((set) => ({
     }
     set({ activeCruiseId: id });
   },
-  setSelectedDate: (date) => set({ selectedDate: date }),
+  setSelectedDate: (date) => {
+    localStorage.setItem('cruiseflow-selected-date', date);
+    set({ selectedDate: date });
+  },
   setApiKey: (key) => {
     localStorage.setItem('cruiseflow-api-key', key);
     set({ apiKey: key });
