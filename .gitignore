@@ -4,3 +4,10 @@ dist
 *.local
 .claude/
 tsconfig.tsbuildinfo
+
+# Capacitor native projects (generated via `npx cap add ios`)
+ios/App/Pods/
+ios/App/build/
+ios/App/DerivedData/
+android/
+.capacitor/

@@ -571,6 +571,7 @@ interface CloudKitPluginBridge {
   getLastSyncTime(): Promise<{ timestamp: number | null }>;
   sync(): Promise<void>;
   isAvailable(): Promise<{ available: boolean }>;
+  shareCruise(options: { cruiseId: string }): Promise<void>;
   addListener(event: string, callback: PluginCallback): Promise<{ remove: () => void }>;
 }
 
@@ -654,6 +655,12 @@ const nativeSync: PlatformSync = {
     } catch {
       return false;
     }
+  },
+
+  async shareCruise(cruiseId: string) {
+    const plugin = getCloudKitPlugin();
+    if (!plugin) return;
+    await plugin.shareCruise({ cruiseId });
   },
 };
 

@@ -107,6 +107,9 @@ export interface PlatformSync {
   sync(): Promise<void>;
   /** Check if iCloud is available on this device. */
   isAvailable(): Promise<boolean>;
+
+  /** Open the native sharing UI to share the current cruise via CKShare. */
+  shareCruise(cruiseId: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

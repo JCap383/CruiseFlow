@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "build:native": "CAPACITOR_BUILD=true tsc -b && CAPACITOR_BUILD=true vite build",
     "cap:sync": "npx cap sync ios",
+    "cap:open": "npx cap open ios",
+    "ios": "npm run build:native && npx cap sync ios && npx cap open ios",
     "preview": "vite preview"
   },
   "dependencies": {
