@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ship, Plus, X, Trash2, Key, Eye, EyeOff } from 'lucide-react';
+import { Ship, Plus, X, Trash2, Key, Eye, EyeOff, Share2 } from 'lucide-react';
 import { useCruise } from '@/hooks/useCruise';
 import { useFamily, addMember, deleteMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
@@ -21,6 +21,7 @@ export function Settings() {
 
   const [newMemberName, setNewMemberName] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [shareMessage, setShareMessage] = useState('');
   const [editingCruise, setEditingCruise] = useState(false);
   const [cruiseName, setCruiseName] = useState('');
   const [shipName, setShipName] = useState('');
@@ -70,6 +71,36 @@ export function Settings() {
   const handleNewCruise = () => {
     setActiveCruise(null);
     navigate('/onboarding');
+  };
+
+  const handleShare = async () => {
+    const shareData = {
+      title: 'CruiseFlow - Cruise Command Center',
+      text: 'Check out CruiseFlow! Plan your cruise, track your family\'s schedule, and build a cruise journal.',
+      url: window.location.origin,
+    };
+
+    let message = '';
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        message = 'Shared successfully!';
+      } else {
+        await navigator.clipboard.writeText(window.location.origin);
+        message = 'Link copied to clipboard!';
+      }
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      try {
+        await navigator.clipboard.writeText(window.location.origin);
+        message = 'Link copied to clipboard!';
+      } catch {
+        message = 'Could not share. Copy this link: ' + window.location.origin;
+      }
+    }
+
+    setShareMessage(message);
+    setTimeout(() => setShareMessage(''), 3000);
   };
 
   if (!cruise) {
@@ -232,6 +263,28 @@ export function Settings() {
             </div>
             {apiKey && (
               <p className="text-xs text-emerald-400">Key saved</p>
+            )}
+          </div>
+        </section>
+
+        {/* Share */}
+        <section>
+          <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+            Share CruiseFlow
+          </h2>
+          <div className="bg-cruise-card rounded-2xl p-4 border border-cruise-border flex flex-col gap-3">
+            <p className="text-xs text-cruise-muted/70">
+              Share CruiseFlow with friends and family so they can install it on
+              their own device and log their own cruises.
+            </p>
+            <Button variant="secondary" onClick={handleShare}>
+              <span className="flex items-center justify-center gap-2">
+                <Share2 className="w-4 h-4" />
+                Share App Link
+              </span>
+            </Button>
+            {shareMessage && (
+              <p className="text-xs text-emerald-400 text-center">{shareMessage}</p>
             )}
           </div>
         </section>
