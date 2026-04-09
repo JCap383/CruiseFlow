@@ -1,17 +1,21 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parse } from 'date-fns';
 import { Camera, Clock, MapPin } from 'lucide-react';
 import { useAllCruiseEvents } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
 import { CATEGORY_CONFIG } from '@/types';
+import type { EventPhoto } from '@/types';
 import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
+import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
 
 export function Memories() {
   const navigate = useNavigate();
   const events = useAllCruiseEvents();
   const members = useFamily();
+  const [lightboxPhotos, setLightboxPhotos] = useState<EventPhoto[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(-1);
 
   // Get events that have notes or photos, grouped by date, sorted chronologically
   const memoryDays = useMemo(() => {
@@ -130,9 +134,15 @@ export function Memories() {
                           {/* Photos grid */}
                           {photos.length > 0 && (
                             <div className="grid grid-cols-3 gap-1.5 mt-2">
-                              {photos.map((photo) => (
+                              {photos.map((photo, photoIdx) => (
                                 <div
                                   key={photo.id}
+                                  role="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLightboxPhotos(photos);
+                                    setLightboxIndex(photoIdx);
+                                  }}
                                   className="aspect-square rounded-lg overflow-hidden bg-cruise-surface"
                                 >
                                   <img
@@ -153,6 +163,14 @@ export function Memories() {
             </div>
           ))}
         </div>
+      )}
+
+      {lightboxIndex >= 0 && (
+        <PhotoLightbox
+          photos={lightboxPhotos}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(-1)}
+        />
       )}
     </div>
   );

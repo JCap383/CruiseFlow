@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -19,6 +19,7 @@ import type { EventPhoto } from '@/types';
 import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { Button } from '@/components/ui/Button';
+import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
 
 function compressPhoto(file: File): Promise<string> {
   return new Promise((resolve) => {
@@ -53,6 +54,7 @@ export function EventDetail() {
   const dayEvents = useEventsForDay(event?.date);
   const conflicts = useEventConflicts(id ?? '', dayEvents);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(-1);
 
   if (!event) {
     return (
@@ -192,8 +194,13 @@ export function EventDetail() {
 
           {photos.length > 0 ? (
             <div className="grid grid-cols-3 gap-2">
-              {photos.map((photo) => (
-                <div key={photo.id} className="relative aspect-square rounded-xl overflow-hidden bg-cruise-surface">
+              {photos.map((photo, photoIdx) => (
+                <div
+                  key={photo.id}
+                  role="button"
+                  onClick={() => setLightboxIndex(photoIdx)}
+                  className="relative aspect-square rounded-xl overflow-hidden bg-cruise-surface"
+                >
                   <img
                     src={photo.dataUrl}
                     alt=""
@@ -254,6 +261,14 @@ export function EventDetail() {
           </span>
         </Button>
       </div>
+
+      {lightboxIndex >= 0 && (
+        <PhotoLightbox
+          photos={photos}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(-1)}
+        />
+      )}
     </div>
   );
 }
