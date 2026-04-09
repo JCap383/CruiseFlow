@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { MemberAvatar } from '@/components/family/MemberAvatar';
 import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
 import { useAllCruiseEvents } from '@/hooks/useEvents';
-import { useSyncStatus } from '@/hooks/useSyncStatus';
+import { useSyncStatus, useLastSyncTime } from '@/hooks/useSyncStatus';
 import { platform } from '@/platform';
 import {
   downloadBackup,
@@ -30,6 +30,7 @@ export function Settings() {
   const members = useFamily();
   const events = useAllCruiseEvents();
   const syncStatus = useSyncStatus();
+  const lastSyncTime = useLastSyncTime();
 
   const [newMemberName, setNewMemberName] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
@@ -457,7 +458,9 @@ export function Settings() {
                   {syncStatus === 'unavailable'
                     ? 'Available in the native iOS app'
                     : syncStatus === 'synced'
-                      ? 'All data backed up to iCloud'
+                      ? lastSyncTime
+                        ? `Last synced ${new Date(lastSyncTime).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}`
+                        : 'All data backed up to iCloud'
                       : syncStatus === 'offline'
                         ? 'Changes will sync when online'
                         : 'Uploading changes...'}

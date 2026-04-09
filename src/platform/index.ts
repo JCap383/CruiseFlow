@@ -7,6 +7,7 @@
  * Usage:
  *   import { platform } from '@/platform';
  *   const cruises = await platform.db.getCruises();
+ *   const photoSrc = await platform.photos.getPhotoSrc(uri);
  */
 
 import { Capacitor } from '@capacitor/core';
@@ -18,4 +19,4 @@ export const platform: Platform = Capacitor.isNativePlatform()
   ? nativePlatform
   : webPlatform;
 
-export type { Platform, PlatformDatabase, PlatformSync, SyncStatus } from './types';
+export type { Platform, PlatformDatabase, PlatformPhotos, PlatformSync, PlatformMigration, SyncStatus, MigrationInfo } from './types';
