@@ -12,8 +12,7 @@ const NCL_PRIMA: Omit<VenueEntry, 'shipName'>[] = [
   { name: 'Surfside Cafe & Grill', deck: 17, category: 'dining', isDefault: true },
   { name: 'The Local Bar & Grill', deck: 8, category: 'dining', isDefault: true },
   { name: 'Indulge Food Hall', deck: 8, category: 'dining', isDefault: true },
-  { name: 'Garden Cafe', deck: 16, category: 'dining', isDefault: true },
-  { name: 'The Great Outdoors', deck: 16, category: 'dining', isDefault: true },
+  { name: 'The Great Outdoors', deck: 17, category: 'dining', isDefault: true },
   // Dining — Specialty
   { name: 'Onda by Scarpetta', deck: 8, category: 'dining', isDefault: true },
   { name: 'Palomar', deck: 17, category: 'dining', isDefault: true },
@@ -32,7 +31,7 @@ const NCL_PRIMA: Omit<VenueEntry, 'shipName'>[] = [
   { name: 'Vibe Beach Club Bar', deck: 17, category: 'bar', isDefault: true },
   { name: 'Waves Pool Bar', deck: 17, category: 'bar', isDefault: true },
   { name: 'The Lido Bar', deck: 16, category: 'bar', isDefault: true },
-  { name: 'Whiskey Bar', deck: 8, category: 'bar', isDefault: true },
+  { name: 'Whiskey Bar', deck: 6, category: 'bar', isDefault: true },
   { name: 'The Soleil Bar', deck: 8, category: 'bar', isDefault: true },
   { name: 'Starbucks', deck: 7, category: 'bar', isDefault: true },
   // Entertainment

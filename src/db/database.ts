@@ -42,4 +42,14 @@ db.version(3).stores({
   });
 });
 
+// v4: fix NCL Prima venue data (remove Garden Cafe, fix deck numbers)
+db.version(4).stores({
+  cruises: 'id, startDate',
+  members: 'id, cruiseId',
+  events: 'id, cruiseId, date, startTime, [cruiseId+date]',
+  venues: 'id, shipName, deck, category, [shipName+category]',
+}).upgrade(async (tx) => {
+  await tx.table('venues').clear();
+});
+
 export { db };
