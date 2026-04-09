@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ship, Plus, X, Trash2, Key, Eye, EyeOff, Share2 } from 'lucide-react';
+import { Ship, Plus, X, Trash2, Key, Eye, EyeOff, Share2, Download, Upload, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useCruise } from '@/hooks/useCruise';
 import { useFamily, addMember, deleteMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
@@ -9,6 +9,13 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { MemberAvatar } from '@/components/family/MemberAvatar';
 import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
+import {
+  downloadBackup,
+  readBackupFile,
+  validateBackup,
+  restoreBackup,
+  type BackupData,
+} from '@/utils/backup';
 
 export function Settings() {
   const navigate = useNavigate();
@@ -25,6 +32,14 @@ export function Settings() {
   const [editingCruise, setEditingCruise] = useState(false);
   const [cruiseName, setCruiseName] = useState('');
   const [shipName, setShipName] = useState('');
+
+  // Backup & restore state
+  const restoreFileRef = useRef<HTMLInputElement>(null);
+  const [backupStatus, setBackupStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [backupMessage, setBackupMessage] = useState('');
+  const [restorePreview, setRestorePreview] = useState<BackupData | null>(null);
+  const [restoreStatus, setRestoreStatus] = useState<'idle' | 'loading' | 'confirming' | 'success' | 'error'>('idle');
+  const [restoreMessage, setRestoreMessage] = useState('');
 
   const handleAddMember = async () => {
     if (!newMemberName.trim() || !activeCruiseId) return;
@@ -101,6 +116,100 @@ export function Settings() {
 
     setShareMessage(message);
     setTimeout(() => setShareMessage(''), 3000);
+  };
+
+  const handleBackup = async () => {
+    setBackupStatus('loading');
+    setBackupMessage('');
+    try {
+      await downloadBackup();
+      setBackupStatus('success');
+      setBackupMessage('Backup downloaded!');
+      setTimeout(() => {
+        setBackupStatus('idle');
+        setBackupMessage('');
+      }, 3000);
+    } catch (err) {
+      setBackupStatus('error');
+      setBackupMessage(err instanceof Error ? err.message : 'Backup failed.');
+      setTimeout(() => {
+        setBackupStatus('idle');
+        setBackupMessage('');
+      }, 5000);
+    }
+  };
+
+  const handleRestoreFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset file input so the same file can be re-selected
+    e.target.value = '';
+
+    setRestoreStatus('loading');
+    setRestoreMessage('');
+    setRestorePreview(null);
+
+    try {
+      const raw = await readBackupFile(file);
+      const result = validateBackup(raw);
+
+      if (!result.valid) {
+        setRestoreStatus('error');
+        setRestoreMessage(result.error);
+        setTimeout(() => {
+          setRestoreStatus('idle');
+          setRestoreMessage('');
+        }, 5000);
+        return;
+      }
+
+      setRestorePreview(result.backup);
+      setRestoreStatus('confirming');
+    } catch (err) {
+      setRestoreStatus('error');
+      setRestoreMessage(err instanceof Error ? err.message : 'Could not read file.');
+      setTimeout(() => {
+        setRestoreStatus('idle');
+        setRestoreMessage('');
+      }, 5000);
+    }
+  };
+
+  const handleRestoreConfirm = async () => {
+    if (!restorePreview) return;
+    setRestoreStatus('loading');
+
+    try {
+      const counts = await restoreBackup(restorePreview);
+      // Set active cruise to the first restored cruise
+      if (restorePreview.cruises.length > 0) {
+        setActiveCruise(restorePreview.cruises[0]!.id);
+      }
+      setRestoreStatus('success');
+      setRestoreMessage(
+        `Restored ${counts.cruises} cruise${counts.cruises !== 1 ? 's' : ''}, ` +
+        `${counts.members} member${counts.members !== 1 ? 's' : ''}, ` +
+        `${counts.events} event${counts.events !== 1 ? 's' : ''}.`
+      );
+      setRestorePreview(null);
+      setTimeout(() => {
+        setRestoreStatus('idle');
+        setRestoreMessage('');
+      }, 5000);
+    } catch (err) {
+      setRestoreStatus('error');
+      setRestoreMessage(err instanceof Error ? err.message : 'Restore failed.');
+      setTimeout(() => {
+        setRestoreStatus('idle');
+        setRestoreMessage('');
+      }, 5000);
+    }
+  };
+
+  const handleRestoreCancel = () => {
+    setRestorePreview(null);
+    setRestoreStatus('idle');
+    setRestoreMessage('');
   };
 
   if (!cruise) {
@@ -285,6 +394,114 @@ export function Settings() {
             </Button>
             {shareMessage && (
               <p className="text-xs text-emerald-400 text-center">{shareMessage}</p>
+            )}
+          </div>
+        </section>
+
+        {/* Backup & Restore */}
+        <section>
+          <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+            Backup & Restore
+          </h2>
+          <div className="bg-cruise-card rounded-2xl p-4 border border-cruise-border flex flex-col gap-3">
+            <p className="text-xs text-cruise-muted/70">
+              Export all your cruises, events, photos, and family members as a
+              backup file. Restore from a backup to recover your data on any
+              device.
+            </p>
+
+            {/* Backup button */}
+            <Button
+              variant="secondary"
+              onClick={handleBackup}
+              disabled={backupStatus === 'loading'}
+            >
+              <span className="flex items-center justify-center gap-2">
+                {backupStatus === 'loading' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                Download Backup
+              </span>
+            </Button>
+
+            {backupMessage && (
+              <p className={`text-xs text-center ${backupStatus === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                {backupMessage}
+              </p>
+            )}
+
+            {/* Restore button */}
+            <input
+              ref={restoreFileRef}
+              type="file"
+              accept=".json"
+              onChange={handleRestoreFileSelect}
+              className="hidden"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => restoreFileRef.current?.click()}
+              disabled={restoreStatus === 'loading' || restoreStatus === 'confirming'}
+            >
+              <span className="flex items-center justify-center gap-2">
+                {restoreStatus === 'loading' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                Restore from Backup
+              </span>
+            </Button>
+
+            {/* Restore confirmation */}
+            {restoreStatus === 'confirming' && restorePreview && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex flex-col gap-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div className="text-sm text-amber-300">
+                    <p className="font-medium">Replace all current data?</p>
+                    <p className="text-xs text-amber-300/70 mt-1">
+                      This backup contains{' '}
+                      <strong>{restorePreview.cruises.length}</strong> cruise{restorePreview.cruises.length !== 1 ? 's' : ''},{' '}
+                      <strong>{restorePreview.members.length}</strong> member{restorePreview.members.length !== 1 ? 's' : ''},{' '}
+                      and <strong>{restorePreview.events.length}</strong> event{restorePreview.events.length !== 1 ? 's' : ''}.
+                    </p>
+                    {restorePreview.exportedAt && (
+                      <p className="text-xs text-amber-300/70 mt-0.5">
+                        Created: {new Date(restorePreview.exportedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={handleRestoreCancel}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={handleRestoreConfirm}
+                    className="flex-1"
+                  >
+                    Replace & Restore
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Restore result message */}
+            {restoreMessage && restoreStatus !== 'confirming' && (
+              <p className={`text-xs text-center flex items-center justify-center gap-1 ${
+                restoreStatus === 'success' ? 'text-emerald-400' : 'text-red-400'
+              }`}>
+                {restoreStatus === 'success' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                {restoreMessage}
+              </p>
             )}
           </div>
         </section>
