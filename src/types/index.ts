@@ -7,12 +7,22 @@ export type EventCategory =
   | 'personal'
   | 'reminder';
 
+export type MoodRating = '🤩' | '😊' | '😐' | '😴' | null;
+
+export const MOOD_OPTIONS: { emoji: MoodRating; label: string }[] = [
+  { emoji: '🤩', label: 'Amazing' },
+  { emoji: '😊', label: 'Good' },
+  { emoji: '😐', label: 'Okay' },
+  { emoji: '😴', label: 'Meh' },
+];
+
 export interface Cruise {
   id: string;
   name: string;
   shipName: string;
   startDate: string; // ISO date "2026-07-10"
   endDate: string;
+  coverPhotos: Record<string, string>; // date -> photoDataUrl
   createdAt: number;
 }
 
@@ -46,6 +56,8 @@ export interface CruiseEvent {
   memberIds: string[];
   reminderMinutes: number | null;
   photos: EventPhoto[];
+  isFavorite: boolean;
+  mood: MoodRating;
   createdAt: number;
   updatedAt: number;
 }

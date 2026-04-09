@@ -181,6 +181,8 @@ export function Scanner() {
         memberIds: [],
         reminderMinutes: null,
         photos: [],
+        isFavorite: false,
+        mood: null,
       });
     }
 

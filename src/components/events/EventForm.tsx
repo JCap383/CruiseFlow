@@ -215,6 +215,8 @@ export function EventForm({
       memberIds: selectedMembers,
       reminderMinutes: null,
       photos: initialData?.photos ?? [],
+      isFavorite: initialData?.isFavorite ?? false,
+      mood: initialData?.mood ?? null,
     });
   };
 

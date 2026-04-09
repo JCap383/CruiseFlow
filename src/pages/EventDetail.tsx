@@ -9,13 +9,15 @@ import {
   AlertTriangle,
   Camera,
   X,
+  Star,
+  Share2,
 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useEvent, useEventsForDay, updateEvent, deleteEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
 import { useEventConflicts } from '@/hooks/useConflicts';
-import { CATEGORY_CONFIG } from '@/types';
-import type { EventPhoto } from '@/types';
+import { CATEGORY_CONFIG, MOOD_OPTIONS } from '@/types';
+import type { EventPhoto, MoodRating } from '@/types';
 import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { Button } from '@/components/ui/Button';
@@ -93,6 +95,33 @@ export function EventDetail() {
     });
   };
 
+  const handleToggleFavorite = async () => {
+    await updateEvent(event.id, { isFavorite: !event.isFavorite });
+  };
+
+  const handleSetMood = async (mood: MoodRating) => {
+    await updateEvent(event.id, {
+      mood: event.mood === mood ? null : mood,
+    });
+  };
+
+  const handleShare = async () => {
+    const text = [
+      event.title,
+      formatTimeRange(event.startTime, event.endTime),
+      event.venue && `at ${event.venue}${event.deck != null ? ` (Deck ${event.deck})` : ''}`,
+      event.notes && `\n${event.notes}`,
+    ].filter(Boolean).join(' — ');
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: event.title, text });
+      } catch { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
+  };
+
   const handleDelete = async () => {
     await deleteEvent(event.id);
     navigate(-1);
@@ -101,11 +130,17 @@ export function EventDetail() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-2 pb-2 border-b border-cruise-border">
+      <div className="flex items-center gap-2 px-4 pt-2 pb-2 border-b border-cruise-border">
         <button onClick={() => navigate(-1)} className="text-cruise-muted p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-bold flex-1">Event Details</h1>
+        <button onClick={handleShare} className="text-cruise-muted p-1">
+          <Share2 className="w-5 h-5" />
+        </button>
+        <button onClick={handleToggleFavorite} className="p-1">
+          <Star className={`w-5 h-5 ${event.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-cruise-muted'}`} />
+        </button>
         <button
           onClick={() => navigate(`/event/${event.id}/edit`)}
           className="text-ocean-400 p-1"
@@ -144,6 +179,27 @@ export function EventDetail() {
             </span>
           </div>
         )}
+
+        {/* Mood picker */}
+        <div>
+          <span className="text-sm text-cruise-muted block mb-2">How was it?</span>
+          <div className="flex gap-2">
+            {MOOD_OPTIONS.map(({ emoji, label }) => (
+              <button
+                key={emoji}
+                onClick={() => handleSetMood(emoji)}
+                className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border transition-colors ${
+                  event.mood === emoji
+                    ? 'bg-ocean-500/20 border-ocean-500'
+                    : 'bg-cruise-card border-cruise-border'
+                }`}
+              >
+                <span className="text-xl">{emoji}</span>
+                <span className="text-[10px] text-cruise-muted">{label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Members */}
         {assignedMembers.length > 0 && (
@@ -245,7 +301,7 @@ export function EventDetail() {
               );
               return (
                 <p key={i} className="text-sm text-amber-200/80 mt-1">
-                  Overlaps with "{other.title}" for{' '}
+                  Overlaps with &ldquo;{other.title}&rdquo; for{' '}
                   {conflictMembers.map((m) => m.name).join(', ')}
                 </p>
               );
@@ -267,6 +323,13 @@ export function EventDetail() {
           photos={photos}
           initialIndex={lightboxIndex}
           onClose={() => setLightboxIndex(-1)}
+          onUpdateCaption={async (photoId, caption) => {
+            await updateEvent(event.id, {
+              photos: photos.map((p) =>
+                p.id === photoId ? { ...p, caption } : p,
+              ),
+            });
+          }}
         />
       )}
     </div>

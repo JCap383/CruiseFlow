@@ -1,14 +1,43 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addDays, subDays, format, parse } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Camera } from 'lucide-react';
+import { nanoid } from 'nanoid';
 import { useAppStore } from '@/stores/appStore';
 import { useCruise } from '@/hooks/useCruise';
-import { useEventsForDay } from '@/hooks/useEvents';
+import { useEventsForDay, updateEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
 import { useConflicts } from '@/hooks/useConflicts';
 import { useReminders } from '@/hooks/useReminders';
 import { EventCard } from '@/components/events/EventCard';
+import { isCurrentlyActive } from '@/utils/time';
+import type { EventPhoto } from '@/types';
+import { OnThisDay } from '@/components/memories/OnThisDay';
+
+function compressPhoto(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 1200;
+        let w = img.width;
+        let h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = (h / w) * MAX; w = MAX; }
+          else { w = (w / h) * MAX; h = MAX; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export function DailySchedule() {
   const navigate = useNavigate();
@@ -18,6 +47,7 @@ export function DailySchedule() {
   const members = useFamily();
   const conflicts = useConflicts(events);
   const reminders = useReminders(events);
+  const captureRef = useRef<HTMLInputElement>(null);
 
   const conflictEventIds = useMemo(() => {
     const ids = new Set<string>();
@@ -27,6 +57,24 @@ export function DailySchedule() {
     }
     return ids;
   }, [conflicts]);
+
+  // Find currently active event for quick capture
+  const activeEvent = useMemo(
+    () => events.find((e) => isCurrentlyActive(e.date, e.startTime, e.endTime)),
+    [events],
+  );
+
+  const handleQuickCapture = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !activeEvent) return;
+    const newPhotos: EventPhoto[] = [];
+    for (const file of Array.from(files)) {
+      const dataUrl = await compressPhoto(file);
+      newPhotos.push({ id: nanoid(), dataUrl, caption: '', addedAt: Date.now() });
+    }
+    await updateEvent(activeEvent.id, {
+      photos: [...(activeEvent.photos ?? []), ...newPhotos],
+    });
+  };
 
   const dateObj = parse(selectedDate, 'yyyy-MM-dd', new Date());
   const dayLabel = format(dateObj, 'EEEE, MMM d');
@@ -65,6 +113,9 @@ export function DailySchedule() {
         </div>
       </div>
 
+      {/* On This Day memories */}
+      <OnThisDay />
+
       {/* Conflict warnings */}
       {conflicts.length > 0 && (
         <div className="mx-4 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
@@ -95,6 +146,27 @@ export function DailySchedule() {
           ))
         )}
       </div>
+
+      {/* Quick capture FAB (only when an event is happening now) */}
+      {activeEvent && (
+        <>
+          <button
+            onClick={() => captureRef.current?.click()}
+            className="fixed bottom-20 left-4 w-12 h-12 bg-amber-500 text-white rounded-full shadow-lg shadow-amber-500/30 flex items-center justify-center active:scale-95 transition-transform z-30"
+            title={`Add photo to "${activeEvent.title}"`}
+          >
+            <Camera className="w-5 h-5" />
+          </button>
+          <input
+            ref={captureRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => { handleQuickCapture(e.target.files); e.target.value = ''; }}
+          />
+        </>
+      )}
 
       {/* FAB */}
       <button

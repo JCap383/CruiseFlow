@@ -57,6 +57,7 @@ export function Onboarding() {
       shipName,
       startDate,
       endDate,
+      coverPhotos: {},
     });
 
     await Promise.all(

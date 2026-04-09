@@ -52,4 +52,20 @@ db.version(4).stores({
   await tx.table('venues').clear();
 });
 
+// v5: add isFavorite, mood to events; coverPhotos to cruises
+db.version(5).stores({
+  cruises: 'id, startDate',
+  members: 'id, cruiseId',
+  events: 'id, cruiseId, date, startTime, [cruiseId+date]',
+  venues: 'id, shipName, deck, category, [shipName+category]',
+}).upgrade(async (tx) => {
+  await tx.table('events').toCollection().modify((event: Record<string, unknown>) => {
+    if (event.isFavorite === undefined) event.isFavorite = false;
+    if (event.mood === undefined) event.mood = null;
+  });
+  await tx.table('cruises').toCollection().modify((cruise: Record<string, unknown>) => {
+    if (!cruise.coverPhotos) cruise.coverPhotos = {};
+  });
+});
+
 export { db };
