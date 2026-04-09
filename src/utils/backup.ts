@@ -1,4 +1,4 @@
-import { db } from '@/db/database';
+import { platform } from '@/platform';
 import type { Cruise, CruiseEvent, FamilyMember } from '@/types';
 
 const BACKUP_VERSION = 1;
@@ -17,19 +17,13 @@ export interface BackupData {
  * Excludes venue seed data since it's auto-generated.
  */
 export async function createBackup(): Promise<BackupData> {
-  const [cruises, members, events] = await Promise.all([
-    db.cruises.toArray(),
-    db.members.toArray(),
-    db.events.toArray(),
-  ]);
+  const data = await platform.db.exportAll();
 
   return {
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     appVersion: '1.0.0',
-    cruises,
-    members,
-    events,
+    ...data,
   };
 }
 
@@ -110,23 +104,10 @@ export function readBackupFile(file: File): Promise<unknown> {
  * Restore data from a validated backup. Replaces all existing data.
  */
 export async function restoreBackup(backup: BackupData): Promise<{ cruises: number; members: number; events: number }> {
-  // Use a transaction to ensure atomicity
-  await db.transaction('rw', db.cruises, db.members, db.events, async () => {
-    // Clear existing user data
-    await db.cruises.clear();
-    await db.members.clear();
-    await db.events.clear();
-
-    // Restore all data
-    if (backup.cruises.length > 0) {
-      await db.cruises.bulkPut(backup.cruises);
-    }
-    if (backup.members.length > 0) {
-      await db.members.bulkPut(backup.members);
-    }
-    if (backup.events.length > 0) {
-      await db.events.bulkPut(backup.events);
-    }
+  await platform.db.importAll({
+    cruises: backup.cruises,
+    members: backup.members,
+    events: backup.events,
   });
 
   return {

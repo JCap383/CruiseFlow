@@ -1,38 +1,35 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { nanoid } from 'nanoid';
-import { db } from '@/db/database';
-import type { Cruise } from '@/types';
+import { platform } from '@/platform';
+import { usePlatformQuery } from '@/platform/usePlatformQuery';
 
 export function useCruises() {
-  // Default is undefined while loading, [] once resolved with no data
-  return useLiveQuery(() => db.cruises.toArray(), []);
+  return usePlatformQuery(
+    () => platform.db.getCruises(),
+    [],
+    undefined as Awaited<ReturnType<typeof platform.db.getCruises>> | undefined,
+  );
 }
 
 export function useCruise(id: string | null) {
-  return useLiveQuery(
-    () => (id ? db.cruises.get(id) : undefined),
+  return usePlatformQuery(
+    () => (id ? platform.db.getCruise(id) : Promise.resolve(undefined)),
     [id],
     undefined,
   );
 }
 
 export async function createCruise(
-  cruise: Omit<Cruise, 'id' | 'createdAt'>,
+  cruise: Parameters<typeof platform.db.createCruise>[0],
 ): Promise<string> {
-  const id = nanoid();
-  await db.cruises.add({ ...cruise, id, coverPhotos: {}, createdAt: Date.now() });
-  return id;
+  return platform.db.createCruise(cruise);
 }
 
 export async function updateCruise(
   id: string,
-  changes: Partial<Omit<Cruise, 'id' | 'createdAt'>>,
+  changes: Parameters<typeof platform.db.updateCruise>[1],
 ) {
-  return db.cruises.update(id, changes);
+  return platform.db.updateCruise(id, changes);
 }
 
 export async function deleteCruise(id: string) {
-  await db.events.where('cruiseId').equals(id).delete();
-  await db.members.where('cruiseId').equals(id).delete();
-  return db.cruises.delete(id);
+  return platform.db.deleteCruise(id);
 }

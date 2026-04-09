@@ -1,4 +1,5 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, createHashRouter } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { AppShell } from '@/components/layout/AppShell';
 import { DailySchedule } from '@/pages/DailySchedule';
 import { FamilyDashboard } from '@/pages/FamilyDashboard';
@@ -9,7 +10,7 @@ import { Onboarding } from '@/pages/Onboarding';
 import { Concierge } from '@/pages/Concierge';
 import { Memories } from '@/pages/Memories';
 
-export const router = createBrowserRouter([
+const routes = [
   {
     path: '/onboarding',
     element: <Onboarding />,
@@ -22,7 +23,7 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { path: '/', element: <DailySchedule /> },
-{ path: '/memories', element: <Memories /> },
+      { path: '/memories', element: <Memories /> },
       { path: '/family', element: <FamilyDashboard /> },
       { path: '/settings', element: <Settings /> },
       { path: '/event/new', element: <AddEditEvent /> },
@@ -30,4 +31,10 @@ export const router = createBrowserRouter([
       { path: '/event/:id/edit', element: <AddEditEvent /> },
     ],
   },
-]);
+];
+
+// Use hash router in native Capacitor shell (WebView has no server for
+// history API fallback). Use browser router on the web.
+export const router = Capacitor.isNativePlatform()
+  ? createHashRouter(routes)
+  : createBrowserRouter(routes);
