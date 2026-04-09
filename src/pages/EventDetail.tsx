@@ -22,6 +22,7 @@ import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { Button } from '@/components/ui/Button';
 import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
+import { SocialShareMenu } from '@/components/ui/SocialShareMenu';
 
 function compressPhoto(file: File): Promise<string> {
   return new Promise((resolve) => {
@@ -57,6 +58,7 @@ export function EventDetail() {
   const conflicts = useEventConflicts(id ?? '', dayEvents);
   const fileRef = useRef<HTMLInputElement>(null);
   const [lightboxIndex, setLightboxIndex] = useState(-1);
+  const [showShareMenu, setShowShareMenu] = useState(false);
 
   if (!event) {
     return (
@@ -105,23 +107,6 @@ export function EventDetail() {
     });
   };
 
-  const handleShare = async () => {
-    const text = [
-      event.title,
-      formatTimeRange(event.startTime, event.endTime),
-      event.venue && `at ${event.venue}${event.deck != null ? ` (Deck ${event.deck})` : ''}`,
-      event.notes && `\n${event.notes}`,
-    ].filter(Boolean).join(' — ');
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: event.title, text });
-      } catch { /* cancelled */ }
-    } else {
-      await navigator.clipboard.writeText(text);
-    }
-  };
-
   const handleDelete = async () => {
     await deleteEvent(event.id);
     navigate(-1);
@@ -135,7 +120,7 @@ export function EventDetail() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-bold flex-1">Event Details</h1>
-        <button onClick={handleShare} className="text-cruise-muted p-1">
+        <button onClick={() => setShowShareMenu(true)} className="text-cruise-muted p-1">
           <Share2 className="w-5 h-5" />
         </button>
         <button onClick={handleToggleFavorite} className="p-1">
@@ -330,6 +315,13 @@ export function EventDetail() {
               ),
             });
           }}
+        />
+      )}
+
+      {showShareMenu && (
+        <SocialShareMenu
+          event={event}
+          onClose={() => setShowShareMenu(false)}
         />
       )}
     </div>
