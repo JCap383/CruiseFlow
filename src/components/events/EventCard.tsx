@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, AlertTriangle, CheckCircle, Camera, Timer } from 'lucide-react';
+import { MapPin, Clock, AlertTriangle, CheckCircle, Camera, Timer, Star } from 'lucide-react';
 import type { CruiseEvent, FamilyMember } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
 import { formatTimeRange, isCurrentlyActive, isPast, formatTime } from '@/utils/time';
@@ -45,7 +45,9 @@ export function EventCard({ event, members, hasConflict, reminder }: EventCardPr
           {/* Header row */}
           <div className="flex items-center justify-between gap-2">
             <h3 className={`font-semibold truncate ${past ? 'text-cruise-muted line-through decoration-cruise-muted/30' : 'text-cruise-text'}`}>
+              {event.isFavorite && <Star className="w-3.5 h-3.5 inline text-amber-400 fill-amber-400 mr-1" />}
               {event.title}
+              {event.mood && <span className="ml-1.5 text-sm">{event.mood}</span>}
             </h3>
             <div className="flex items-center gap-1.5 shrink-0">
               {photoCount > 0 && (

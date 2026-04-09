@@ -20,7 +20,7 @@ export async function createCruise(
   cruise: Omit<Cruise, 'id' | 'createdAt'>,
 ): Promise<string> {
   const id = nanoid();
-  await db.cruises.add({ ...cruise, id, createdAt: Date.now() });
+  await db.cruises.add({ ...cruise, id, coverPhotos: {}, createdAt: Date.now() });
   return id;
 }
 
