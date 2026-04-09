@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ship, Plus, X, Trash2, Key, Eye, EyeOff, Share2, Download, Upload, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Ship, Plus, X, Trash2, Key, Eye, EyeOff, Share2, Download, Upload, Loader2, CheckCircle2, AlertTriangle, Database, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { useCruise } from '@/hooks/useCruise';
 import { useFamily, addMember, deleteMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { MemberAvatar } from '@/components/family/MemberAvatar';
 import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
+import { useAllCruiseEvents } from '@/hooks/useEvents';
+import { useSyncStatus } from '@/hooks/useSyncStatus';
+import { platform } from '@/platform';
 import {
   downloadBackup,
   readBackupFile,
@@ -25,6 +28,8 @@ export function Settings() {
   const setApiKey = useAppStore((s) => s.setApiKey);
   const cruise = useCruise(activeCruiseId);
   const members = useFamily();
+  const events = useAllCruiseEvents();
+  const syncStatus = useSyncStatus();
 
   const [newMemberName, setNewMemberName] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
@@ -395,6 +400,70 @@ export function Settings() {
             {shareMessage && (
               <p className="text-xs text-emerald-400 text-center">{shareMessage}</p>
             )}
+          </div>
+        </section>
+
+        {/* Data & Sync */}
+        <section>
+          <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+            Data & Sync
+          </h2>
+          <div className="bg-cruise-card rounded-2xl p-4 border border-cruise-border flex flex-col gap-3">
+            {/* Storage info */}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-ocean-500/15 rounded-lg flex items-center justify-center">
+                <Database className="w-4 h-4 text-ocean-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Local Storage</p>
+                <p className="text-xs text-cruise-muted">
+                  {platform.name === 'web' ? 'IndexedDB (Browser)' : 'SQLite (Device)'}
+                </p>
+              </div>
+            </div>
+
+            {/* Data counts */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-cruise-surface rounded-xl p-2">
+                <p className="text-lg font-bold text-ocean-400">1</p>
+                <p className="text-[10px] text-cruise-muted uppercase">Cruise</p>
+              </div>
+              <div className="bg-cruise-surface rounded-xl p-2">
+                <p className="text-lg font-bold text-ocean-400">{members.length}</p>
+                <p className="text-[10px] text-cruise-muted uppercase">Members</p>
+              </div>
+              <div className="bg-cruise-surface rounded-xl p-2">
+                <p className="text-lg font-bold text-ocean-400">{events.length}</p>
+                <p className="text-[10px] text-cruise-muted uppercase">Events</p>
+              </div>
+            </div>
+
+            {/* Sync status */}
+            <div className="flex items-center gap-3 pt-1 border-t border-cruise-border">
+              <div className="w-8 h-8 bg-cruise-surface rounded-lg flex items-center justify-center">
+                {syncStatus === 'synced' && <Cloud className="w-4 h-4 text-emerald-400" />}
+                {syncStatus === 'syncing' && <RefreshCw className="w-4 h-4 text-ocean-400 animate-spin" />}
+                {syncStatus === 'offline' && <CloudOff className="w-4 h-4 text-amber-400" />}
+                {syncStatus === 'unavailable' && <CloudOff className="w-4 h-4 text-cruise-muted" />}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">
+                  {syncStatus === 'synced' && 'iCloud Synced'}
+                  {syncStatus === 'syncing' && 'Syncing...'}
+                  {syncStatus === 'offline' && 'Offline'}
+                  {syncStatus === 'unavailable' && 'iCloud Sync'}
+                </p>
+                <p className="text-xs text-cruise-muted">
+                  {syncStatus === 'unavailable'
+                    ? 'Available in the native iOS app'
+                    : syncStatus === 'synced'
+                      ? 'All data backed up to iCloud'
+                      : syncStatus === 'offline'
+                        ? 'Changes will sync when online'
+                        : 'Uploading changes...'}
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 

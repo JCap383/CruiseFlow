@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Utensils,
   Music,
@@ -21,7 +20,8 @@ import { CATEGORY_CONFIG } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Input, TextArea } from '@/components/ui/Input';
 import { MemberAvatar } from '@/components/family/MemberAvatar';
-import { db } from '@/db/database';
+import { platform } from '@/platform';
+import { usePlatformQuery } from '@/platform/usePlatformQuery';
 
 interface EventFormProps {
   initialData?: CruiseEvent;
@@ -112,15 +112,18 @@ export function EventForm({
   const [showVenuePicker, setShowVenuePicker] = useState(false);
   const [venueFilter, setVenueFilter] = useState('');
 
-  const venues = useLiveQuery(
+  const venues = usePlatformQuery(
     async () => {
-      if (!shipName) return db.venues.toArray();
+      if (!shipName) {
+        // No ship name — return all venues
+        return platform.db.getVenuesForShip('');
+      }
       const normalized = shipName.toLowerCase().trim();
       // Try exact match first
-      const exact = await db.venues.where('shipName').equalsIgnoreCase(shipName).toArray();
+      const exact = await platform.db.getVenuesForShip(shipName);
       if (exact.length > 0) return exact;
-      // Fuzzy: match if either contains the other
-      const all = await db.venues.toArray();
+      // Fuzzy: get all venues and match if either contains the other
+      const all = await platform.db.getVenuesForShip('');
       const fuzzy = all.filter((v) => {
         const vn = v.shipName.toLowerCase();
         return vn.includes(normalized) || normalized.includes(vn);
