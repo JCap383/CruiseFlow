@@ -226,6 +226,9 @@ const webSync: PlatformSync = {
   async isAvailable() {
     return false;
   },
+  async shareCruise() {
+    // Not available on web
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ship, Plus, X, Trash2, Key, Eye, EyeOff, Share2, Download, Upload, Loader2, CheckCircle2, AlertTriangle, Database, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { Ship, Plus, X, Trash2, Key, Eye, EyeOff, Share2, Download, Upload, Loader2, CheckCircle2, AlertTriangle, Database, Cloud, CloudOff, RefreshCw, Users } from 'lucide-react';
 import { useCruise } from '@/hooks/useCruise';
 import { useFamily, addMember, deleteMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
@@ -38,6 +38,9 @@ export function Settings() {
   const [editingCruise, setEditingCruise] = useState(false);
   const [cruiseName, setCruiseName] = useState('');
   const [shipName, setShipName] = useState('');
+
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Backup & restore state
   const restoreFileRef = useRef<HTMLInputElement>(null);
@@ -122,6 +125,16 @@ export function Settings() {
 
     setShareMessage(message);
     setTimeout(() => setShareMessage(''), 3000);
+  };
+
+  const handleSyncNow = async () => {
+    if (!platform.sync || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      await platform.sync.sync();
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleBackup = async () => {
@@ -466,9 +479,58 @@ export function Settings() {
                         : 'Uploading changes...'}
                 </p>
               </div>
+              {/* Sync button — only show on native when not already syncing */}
+              {platform.name === 'native' && syncStatus !== 'unavailable' && (
+                <button
+                  onClick={handleSyncNow}
+                  disabled={isSyncing || syncStatus === 'syncing'}
+                  className="p-2 text-cruise-muted hover:text-ocean-400 transition-colors disabled:opacity-30"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                </button>
+              )}
             </div>
           </div>
         </section>
+
+        {/* Family Sharing — native only */}
+        {platform.name === 'native' && syncStatus !== 'unavailable' && (
+          <section>
+            <h2 className="text-sm font-medium text-cruise-muted mb-3 uppercase tracking-wider">
+              Family Sharing
+            </h2>
+            <div className="bg-cruise-card rounded-2xl p-4 border border-cruise-border flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-ocean-500/15 rounded-lg flex items-center justify-center">
+                  <Users className="w-4 h-4 text-ocean-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Share This Cruise</p>
+                  <p className="text-xs text-cruise-muted">
+                    Invite family members to view and edit this cruise together via iCloud.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (platform.sync && activeCruiseId) {
+                    platform.sync.shareCruise(activeCruiseId);
+                  }
+                }}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <Share2 className="w-4 h-4" />
+                  Invite Family
+                </span>
+              </Button>
+              <p className="text-xs text-cruise-muted/70">
+                Family members need CruiseFlow installed and iCloud enabled.
+                Everyone can add events, notes, and photos to the shared cruise.
+              </p>
+            </div>
+          </section>
+        )}
 
         {/* Backup & Restore */}
         <section>

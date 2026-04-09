@@ -8,4 +8,5 @@ CAP_PLUGIN(CruiseFlowCloudKitPlugin, "CruiseFlowCloudKit",
     CAP_PLUGIN_METHOD(getLastSyncTime, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(sync, CAPPluginReturnPromise);
     CAP_PLUGIN_METHOD(isAvailable, CAPPluginReturnPromise);
+    CAP_PLUGIN_METHOD(shareCruise, CAPPluginReturnPromise);
 )
