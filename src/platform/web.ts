@@ -2,12 +2,12 @@
  * Web platform implementation — wraps current Dexie / IndexedDB layer.
  *
  * This preserves all existing behaviour while conforming to the
- * PlatformDatabase interface so hooks can be backend-agnostic.
+ * Platform interface so hooks can be backend-agnostic.
  */
 
 import { nanoid } from 'nanoid';
 import { db } from '@/db/database';
-import type { Platform, PlatformDatabase, PlatformSync, SyncStatus } from './types';
+import type { Platform, PlatformDatabase, PlatformPhotos, PlatformSync, SyncStatus } from './types';
 
 // ---------------------------------------------------------------------------
 // Change notification
@@ -177,6 +177,33 @@ const webDb: PlatformDatabase = {
 };
 
 // ---------------------------------------------------------------------------
+// Photos (web — inline base64, no file system)
+// ---------------------------------------------------------------------------
+
+const webPhotos: PlatformPhotos = {
+  async savePhoto(dataUrl) {
+    // On web, photos are stored as inline base64 in IndexedDB.
+    // Just pass through the dataUrl.
+    return dataUrl;
+  },
+
+  async getPhotoSrc(uri) {
+    // On web, the URI is already a displayable data URL.
+    return uri;
+  },
+
+  async deletePhoto(_uri) {
+    // On web, photos are embedded in event records — no separate cleanup.
+  },
+
+  async captureFromCamera() {
+    // Web doesn't have native camera access via this API.
+    // Components should use <input type="file" capture="environment"> instead.
+    return null;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Sync stub (web has no iCloud sync)
 // ---------------------------------------------------------------------------
 
@@ -184,12 +211,20 @@ const webSync: PlatformSync = {
   getStatus(): SyncStatus {
     return 'unavailable';
   },
+  getLastSyncTime() {
+    return null;
+  },
   onStatusChange() {
-    // No-op on web
+    return () => {};
+  },
+  onDataChanged() {
     return () => {};
   },
   async sync() {
     // No-op on web
+  },
+  async isAvailable() {
+    return false;
   },
 };
 
@@ -200,5 +235,7 @@ const webSync: PlatformSync = {
 export const webPlatform: Platform = {
   name: 'web',
   db: webDb,
+  photos: webPhotos,
   sync: webSync,
+  migration: null,
 };

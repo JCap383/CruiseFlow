@@ -2,8 +2,8 @@
  * Platform abstraction interfaces.
  *
  * All data access goes through these interfaces so the app can run on:
- *   - Web (Dexie / IndexedDB)      — current implementation
- *   - Native iOS (SQLite + CloudKit) — future implementation
+ *   - Web (Dexie / IndexedDB)         — current implementation
+ *   - Native iOS (SQLite + CloudKit)   — native implementation
  */
 
 import type { Cruise, CruiseEvent, FamilyMember, Venue } from '@/types';
@@ -52,16 +52,88 @@ export interface PlatformDatabase {
 }
 
 // ---------------------------------------------------------------------------
-// Sync interface (for CloudKit — Phase 5)
+// Photo storage interface
+// ---------------------------------------------------------------------------
+
+export interface PlatformPhotos {
+  /**
+   * Store a photo and return a URI/path that can be used to display it.
+   * On web: returns the base64 dataUrl as-is (stored inline in IndexedDB).
+   * On native: writes compressed JPEG to device storage, returns file:// path.
+   */
+  savePhoto(dataUrl: string): Promise<string>;
+
+  /**
+   * Read a photo by its stored URI. Returns a displayable src string.
+   * On web: returns the dataUrl as-is.
+   * On native: reads from Filesystem and returns a web-viewable URI.
+   */
+  getPhotoSrc(uri: string): Promise<string>;
+
+  /**
+   * Delete a stored photo by its URI.
+   * On web: no-op (photos are inline in IndexedDB).
+   * On native: deletes the file from device storage.
+   */
+  deletePhoto(uri: string): Promise<void>;
+
+  /**
+   * Capture a photo using the device camera (native only).
+   * On web: returns null (use HTML file input instead).
+   * On native: launches the native camera, returns the saved photo URI.
+   */
+  captureFromCamera(): Promise<string | null>;
+}
+
+// ---------------------------------------------------------------------------
+// Sync interface (for CloudKit)
 // ---------------------------------------------------------------------------
 
 export type SyncStatus = 'synced' | 'syncing' | 'offline' | 'unavailable';
 
+export interface SyncEvent {
+  type: 'status-change' | 'data-changed' | 'error';
+  status?: SyncStatus;
+  error?: string;
+  timestamp: number;
+}
+
 export interface PlatformSync {
   getStatus(): SyncStatus;
+  getLastSyncTime(): number | null;
   onStatusChange(callback: (status: SyncStatus) => void): () => void;
+  onDataChanged(callback: () => void): () => void;
   /** Force a sync attempt. */
   sync(): Promise<void>;
+  /** Check if iCloud is available on this device. */
+  isAvailable(): Promise<boolean>;
+}
+
+// ---------------------------------------------------------------------------
+// Migration interface
+// ---------------------------------------------------------------------------
+
+export interface MigrationInfo {
+  needed: boolean;
+  sourceRecordCount: number;
+  description: string;
+}
+
+export interface PlatformMigration {
+  /**
+   * Check if migration from IndexedDB to SQLite is needed.
+   */
+  checkMigration(): Promise<MigrationInfo>;
+
+  /**
+   * Run the migration. Calls onProgress with 0-100 values.
+   */
+  runMigration(onProgress: (percent: number) => void): Promise<void>;
+
+  /**
+   * Mark migration as complete.
+   */
+  markComplete(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,5 +143,7 @@ export interface PlatformSync {
 export interface Platform {
   name: 'web' | 'native';
   db: PlatformDatabase;
+  photos: PlatformPhotos;
   sync: PlatformSync | null; // null on web
+  migration: PlatformMigration | null; // null on web
 }
