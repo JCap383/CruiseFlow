@@ -93,14 +93,14 @@ export function PhotoLightbox({ photos, initialIndex, onClose, onUpdateCaption }
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white"
+        className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white"
       >
         <X className="w-6 h-6" />
       </button>
 
       {/* Counter */}
       {photos.length > 1 && (
-        <span className="absolute top-5 left-1/2 -translate-x-1/2 text-sm text-white/70">
+        <span className="absolute top-[max(1.25rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 text-sm text-white/70">
           {index + 1} / {photos.length}
         </span>
       )}

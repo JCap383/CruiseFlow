@@ -233,7 +233,7 @@ export function MapView({ onClose }: MapViewProps) {
   return (
     <div className="fixed inset-0 z-50 bg-cruise-bg flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-cruise-border bg-cruise-bg z-20">
+      <div className="flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-cruise-border bg-cruise-bg z-20">
         <button onClick={onClose} className="text-cruise-muted p-1">
           <X className="w-5 h-5" />
         </button>

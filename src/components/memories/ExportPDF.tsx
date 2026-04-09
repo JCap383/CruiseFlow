@@ -106,7 +106,7 @@ export function ExportPDF({ onClose }: ExportPDFProps) {
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex flex-col">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 bg-cruise-bg border-b border-cruise-border">
+      <div className="flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] bg-cruise-bg border-b border-cruise-border">
         <button onClick={onClose} className="text-cruise-muted p-1">
           <X className="w-5 h-5" />
         </button>
