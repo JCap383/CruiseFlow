@@ -1,16 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parse, differenceInDays } from 'date-fns';
+import { nanoid } from 'nanoid';
 import {
   Camera, Clock, MapPin, Star, Filter, Image, FileText,
-  Anchor, Share2, FileDown, Navigation,
+  Anchor, Share2, FileDown, Navigation, Plus, X, Check,
 } from 'lucide-react';
-import { useAllCruiseEvents } from '@/hooks/useEvents';
+import { useAllCruiseEvents, addEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
 import { useCruise, updateCruise } from '@/hooks/useCruise';
 import { useAppStore } from '@/stores/appStore';
-import { CATEGORY_CONFIG } from '@/types';
-import type { EventPhoto, CruiseEvent } from '@/types';
+import { CATEGORY_CONFIG, MOOD_OPTIONS } from '@/types';
+import type { EventPhoto, CruiseEvent, MoodRating } from '@/types';
 import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
@@ -31,6 +32,12 @@ export function Memories() {
   const [showFilters, setShowFilters] = useState(false);
   const [showExportPDF, setShowExportPDF] = useState(false);
   const [showMapView, setShowMapView] = useState(false);
+  const [showQuickMemory, setShowQuickMemory] = useState(false);
+  const [qmTitle, setQmTitle] = useState('');
+  const [qmNotes, setQmNotes] = useState('');
+  const [qmMood, setQmMood] = useState<MoodRating>(null);
+  const [qmPhotos, setQmPhotos] = useState<EventPhoto[]>([]);
+  const qmFileRef = useRef<HTMLInputElement>(null);
 
   // Trip stats
   const stats = useMemo(() => {
@@ -91,6 +98,69 @@ export function Memories() {
     await updateCruise(activeCruiseId, {
       coverPhotos: { ...cruise.coverPhotos, [date]: dataUrl },
     });
+  };
+
+  const compressPhoto = (file: File): Promise<string> =>
+    new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX = 1200;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = (h / w) * MAX; w = MAX; }
+            else { w = (w / h) * MAX; h = MAX; }
+          }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const handleQmAddPhotos = async (files: FileList | null) => {
+    if (!files) return;
+    const newPhotos: EventPhoto[] = [];
+    for (const file of Array.from(files)) {
+      const dataUrl = await compressPhoto(file);
+      newPhotos.push({ id: nanoid(), dataUrl, caption: '', addedAt: Date.now() });
+    }
+    setQmPhotos((prev) => [...prev, ...newPhotos]);
+  };
+
+  const handleCreateQuickMemory = async () => {
+    if (!activeCruiseId) return;
+    const now = new Date();
+    const date = format(now, 'yyyy-MM-dd');
+    const time = format(now, 'HH:mm');
+
+    await addEvent({
+      cruiseId: activeCruiseId,
+      title: qmTitle.trim() || 'Quick Memory',
+      date,
+      startTime: time,
+      endTime: time,
+      category: 'personal',
+      venue: '',
+      deck: null,
+      notes: qmNotes,
+      memberIds: [],
+      reminderMinutes: null,
+      photos: qmPhotos,
+      isFavorite: false,
+      mood: qmMood,
+    });
+
+    // Reset form
+    setQmTitle('');
+    setQmNotes('');
+    setQmMood(null);
+    setQmPhotos([]);
+    setShowQuickMemory(false);
   };
 
   const handleShareTrip = async () => {
@@ -379,6 +449,116 @@ export function Memories() {
           }}
         />
       )}
+      {/* Quick Memory FAB */}
+      <button
+        onClick={() => setShowQuickMemory(true)}
+        className="fixed bottom-20 right-4 w-14 h-14 bg-ocean-500 text-white rounded-full shadow-lg shadow-ocean-500/30 flex items-center justify-center active:scale-95 transition-transform z-30"
+        title="Add Quick Memory"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
+      {/* Quick Memory Bottom Sheet */}
+      {showQuickMemory && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setShowQuickMemory(false)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-cruise-bg border-t border-cruise-border rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-slide-up max-h-[85vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-cruise-text">Quick Memory</h3>
+              <button onClick={() => setShowQuickMemory(false)} className="text-cruise-muted p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Title */}
+            <input
+              value={qmTitle}
+              onChange={(e) => setQmTitle(e.target.value)}
+              placeholder="What's this memory? (optional)"
+              className="w-full bg-cruise-card border border-cruise-border rounded-xl px-4 py-2.5 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500 transition-colors mb-3"
+            />
+
+            {/* Notes */}
+            <textarea
+              value={qmNotes}
+              onChange={(e) => setQmNotes(e.target.value)}
+              placeholder="Add a note..."
+              rows={3}
+              className="w-full bg-cruise-card border border-cruise-border rounded-xl px-4 py-2.5 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500 transition-colors mb-3 resize-none"
+            />
+
+            {/* Mood */}
+            <div className="flex gap-2 mb-3">
+              {MOOD_OPTIONS.map(({ emoji, label }) => (
+                <button
+                  key={emoji}
+                  onClick={() => setQmMood(qmMood === emoji ? null : emoji)}
+                  className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border transition-colors flex-1 ${
+                    qmMood === emoji
+                      ? 'bg-ocean-500/20 border-ocean-500'
+                      : 'bg-cruise-card border-cruise-border'
+                  }`}
+                >
+                  <span className="text-lg">{emoji}</span>
+                  <span className="text-[9px] text-cruise-muted">{label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Photos */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-cruise-muted">
+                  Photos {qmPhotos.length > 0 && `(${qmPhotos.length})`}
+                </span>
+                <button
+                  onClick={() => qmFileRef.current?.click()}
+                  className="flex items-center gap-1 text-xs text-ocean-400 bg-ocean-400/10 px-2.5 py-1 rounded-full"
+                >
+                  <Camera className="w-3 h-3" />
+                  Add
+                </button>
+                <input
+                  ref={qmFileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => { handleQmAddPhotos(e.target.files); e.target.value = ''; }}
+                />
+              </div>
+              {qmPhotos.length > 0 && (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {qmPhotos.map((photo, idx) => (
+                    <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden">
+                      <img src={photo.dataUrl} alt="" className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => setQmPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Save button */}
+            <button
+              onClick={handleCreateQuickMemory}
+              disabled={!qmTitle.trim() && !qmNotes.trim() && qmPhotos.length === 0 && !qmMood}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-ocean-500 text-white font-medium text-sm disabled:opacity-30 active:scale-[0.98] transition-all"
+            >
+              <Check className="w-4 h-4" />
+              Save Memory
+            </button>
+          </div>
+        </div>
+      )}
+
       {showExportPDF && <ExportPDF onClose={() => setShowExportPDF(false)} />}
       {showMapView && <MapView onClose={() => setShowMapView(false)} />}
     </div>

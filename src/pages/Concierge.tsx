@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Send,
   Loader2,
-  Camera,
   Sparkles,
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
@@ -25,7 +24,7 @@ const QUICK_PROMPTS = [
 
 export function Concierge() {
   const navigate = useNavigate();
-  const { apiKey, scanResults } = useAppStore();
+  const { apiKey } = useAppStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -33,18 +32,7 @@ export function Concierge() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Build context from scan results
-  const plannerContext = scanResults
-    .map((r, i) => {
-      const eventsText = r.events
-        .map(
-          (e) =>
-            `- ${e.title} | ${e.startTime}-${e.endTime} | ${e.venue || 'TBD'}${e.deck ? ` (Deck ${e.deck})` : ''} | ${e.category}${e.notes ? ` | ${e.notes}` : ''}`,
-        )
-        .join('\n');
-      return `[Planner ${i + 1}${r.date ? ` - ${r.date}` : ''}]\n${eventsText}\n\nFull text:\n${r.rawText}`;
-    })
-    .join('\n\n---\n\n');
+  const plannerContext = '';
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -96,8 +84,6 @@ export function Concierge() {
     }
   };
 
-  const hasData = scanResults.length > 0;
-
   return (
     <div className="flex flex-col h-full max-w-lg mx-auto">
       {/* Header */}
@@ -126,36 +112,22 @@ export function Concierge() {
                 Your Personal Cruise Concierge
               </h2>
               <p className="text-sm text-cruise-muted mt-1">
-                {hasData
-                  ? `I have your daily planner data loaded. Ask me anything about today's activities!`
-                  : 'Upload cruise planner photos in the Scanner to give me your daily schedule.'}
+                Ask me anything about your cruise — dining, shows, excursions, and more!
               </p>
             </div>
 
-            {!hasData && (
-              <button
-                onClick={() => navigate('/scanner')}
-                className="flex items-center gap-2 text-sm text-ocean-400 bg-ocean-400/10 px-4 py-2 rounded-xl"
-              >
-                <Camera className="w-4 h-4" />
-                Scan a planner first
-              </button>
-            )}
-
             {/* Quick prompts */}
-            {hasData && (
-              <div className="flex flex-wrap gap-2 justify-center">
-                {QUICK_PROMPTS.map((prompt) => (
-                  <button
-                    key={prompt}
-                    onClick={() => sendMessage(prompt)}
-                    className="text-xs bg-cruise-card border border-cruise-border px-3 py-1.5 rounded-full text-cruise-muted hover:text-cruise-text hover:border-ocean-500/30 transition-colors"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {QUICK_PROMPTS.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => sendMessage(prompt)}
+                  className="text-xs bg-cruise-card border border-cruise-border px-3 py-1.5 rounded-full text-cruise-muted hover:text-cruise-text hover:border-ocean-500/30 transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -218,11 +190,7 @@ export function Concierge() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              hasData
-                ? 'Ask about activities, shows, dining...'
-                : 'Upload a planner to get started...'
-            }
+            placeholder="Ask about activities, shows, dining..."
             disabled={!apiKey || isLoading}
             className="flex-1 bg-cruise-card border border-cruise-border rounded-xl px-4 py-2.5 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500 transition-colors disabled:opacity-50"
           />
