@@ -1,9 +1,8 @@
 import { NavLink } from 'react-router-dom';
-import { CalendarDays, ScanLine, BookOpen, Users, Settings } from 'lucide-react';
+import { CalendarDays, BookOpen, Users, Settings } from 'lucide-react';
 
 const tabs = [
   { to: '/', icon: CalendarDays, label: 'Schedule' },
-  { to: '/scanner', icon: ScanLine, label: 'Scanner' },
   { to: '/memories', icon: BookOpen, label: 'Memories' },
   { to: '/family', icon: Users, label: 'Family' },
   { to: '/settings', icon: Settings, label: 'Settings' },

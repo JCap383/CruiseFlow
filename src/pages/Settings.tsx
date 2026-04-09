@@ -236,8 +236,8 @@ export function Settings() {
               <span>Google Gemini API Key</span>
             </div>
             <p className="text-xs text-cruise-muted/70">
-              Free from aistudio.google.com/apikey — required for planner
-              scanning and cruise concierge. Stored locally on this device only.
+              Free from aistudio.google.com/apikey — required for the cruise
+              concierge. Stored locally on this device only.
             </p>
             <div className="flex gap-2">
               <div className="relative flex-1">
