@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addDays, subDays, format, parse } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useCruise } from '@/hooks/useCruise';
 import { useEventsForDay } from '@/hooks/useEvents';
@@ -9,7 +9,6 @@ import { useFamily } from '@/hooks/useFamily';
 import { useConflicts } from '@/hooks/useConflicts';
 import { useReminders } from '@/hooks/useReminders';
 import { EventCard } from '@/components/events/EventCard';
-import { formatTime } from '@/utils/time';
 
 export function DailySchedule() {
   const navigate = useNavigate();
@@ -75,24 +74,6 @@ export function DailySchedule() {
         </div>
       )}
 
-      {/* Travel reminders */}
-      {reminders.length > 0 && (
-        <div className="mx-4 mt-3 flex flex-col gap-2">
-          {reminders.map((r) => (
-            <div
-              key={r.event.id}
-              className="flex items-center gap-2 p-2.5 bg-ocean-500/10 border border-ocean-500/20 rounded-xl text-sm"
-            >
-              <Info className="w-4 h-4 text-ocean-400 shrink-0" />
-              <span className="text-ocean-200">
-                Leave by <strong>{formatTime(r.leaveByTime)}</strong> for{' '}
-                {r.event.title} (~{r.travelMinutes} min)
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Events list */}
       <div className="flex flex-col gap-3 p-4">
         {events.length === 0 ? (
@@ -109,6 +90,7 @@ export function DailySchedule() {
               event={event}
               members={members}
               hasConflict={conflictEventIds.has(event.id)}
+              reminder={reminders.get(event.id)}
             />
           ))
         )}

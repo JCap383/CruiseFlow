@@ -48,3 +48,28 @@ export function isPast(date: string, endTime: string): boolean {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   return timeToMinutes(endTime) <= nowMinutes;
 }
+
+/** Returns true if the event starts within the next `windowMinutes` and hasn't started yet. */
+export function isStartingSoon(
+  date: string,
+  startTime: string,
+  windowMinutes = 30,
+): boolean {
+  const now = new Date();
+  const today = format(now, 'yyyy-MM-dd');
+  if (date !== today) return false;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMin = timeToMinutes(startTime);
+  return startMin > nowMinutes && startMin - nowMinutes <= windowMinutes;
+}
+
+/** Returns the number of minutes until the event starts, or null if not today / already started. */
+export function minutesUntilStart(date: string, startTime: string): number | null {
+  const now = new Date();
+  const today = format(now, 'yyyy-MM-dd');
+  if (date !== today) return null;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const startMin = timeToMinutes(startTime);
+  const diff = startMin - nowMinutes;
+  return diff > 0 ? diff : null;
+}

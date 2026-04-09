@@ -1,17 +1,19 @@
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, AlertTriangle, CheckCircle, Camera } from 'lucide-react';
+import { MapPin, Clock, AlertTriangle, CheckCircle, Camera, Timer } from 'lucide-react';
 import type { CruiseEvent, FamilyMember } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
-import { formatTimeRange, isCurrentlyActive, isPast } from '@/utils/time';
+import { formatTimeRange, isCurrentlyActive, isPast, formatTime } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
+import type { ReminderInfo } from '@/hooks/useReminders';
 
 interface EventCardProps {
   event: CruiseEvent;
   members: FamilyMember[];
   hasConflict?: boolean;
+  reminder?: ReminderInfo;
 }
 
-export function EventCard({ event, members, hasConflict }: EventCardProps) {
+export function EventCard({ event, members, hasConflict, reminder }: EventCardProps) {
   const navigate = useNavigate();
   const config = CATEGORY_CONFIG[event.category];
   const active = isCurrentlyActive(event.date, event.startTime, event.endTime);
@@ -84,12 +86,27 @@ export function EventCard({ event, members, hasConflict }: EventCardProps) {
             </div>
           )}
 
-          {/* Active badge */}
+          {/* Status badges */}
           {active && (
             <div className="mt-2">
               <span className="text-xs font-medium text-ocean-400 bg-ocean-400/10 px-2 py-0.5 rounded-full">
                 Happening now
               </span>
+            </div>
+          )}
+          {!active && !past && reminder && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-full">
+                <Timer className="w-3 h-3" />
+                {reminder.minutesUntil != null
+                  ? `Starts in ${reminder.minutesUntil} min`
+                  : 'Starting soon'}
+              </span>
+              {reminder.leaveByTime && reminder.travelMinutes && (
+                <span className="text-xs text-cruise-muted">
+                  Leave by {formatTime(reminder.leaveByTime)} (~{reminder.travelMinutes} min travel)
+                </span>
+              )}
             </div>
           )}
         </div>
