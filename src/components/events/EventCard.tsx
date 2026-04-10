@@ -1,9 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { MapPin, Clock, AlertTriangle, CheckCircle, Camera, Timer, Star } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import type { CruiseEvent, FamilyMember } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
 import { formatTimeRange, isCurrentlyActive, isPast, formatTime } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
+import { Badge } from '@/components/ui/Badge';
+import { Text } from '@/components/ui/Text';
+import { haptics } from '@/utils/haptics';
 import type { ReminderInfo } from '@/hooks/useReminders';
 
 interface EventCardProps {
@@ -32,107 +36,139 @@ export function EventCard({ event, members, hasConflict, reminder }: EventCardPr
     past ? '. Completed' : '',
   ].filter(Boolean).join(', ');
 
+  const cardStyle: CSSProperties = hasConflict
+    ? {
+        backgroundColor: 'var(--warning-soft)',
+        border: '1.5px solid var(--warning)',
+        boxShadow: '0 0 0 3px color-mix(in srgb, var(--warning) 14%, transparent)',
+      }
+    : active
+      ? {
+          backgroundColor: 'var(--accent-soft)',
+          border: '1.5px solid var(--accent)',
+        }
+      : past
+        ? {
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-default)',
+            opacity: 0.72,
+          }
+        : {
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-default)',
+          };
+
   return (
     <button
-      onClick={() => navigate(`/event/${event.id}`)}
+      onClick={() => {
+        void haptics.tap();
+        navigate(`/event/${event.id}`);
+      }}
       aria-label={ariaLabel}
-      className={`w-full text-left rounded-2xl p-4 transition-colors active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500 focus-visible:ring-offset-2 focus-visible:ring-offset-cruise-bg ${
-        hasConflict
-          ? 'bg-amber-500/10 border-2 border-amber-500/60 shadow-[0_0_0_1px_rgba(251,191,36,0.2)]'
-          : active
-            ? 'bg-ocean-500/15 border border-ocean-500/40'
-            : past
-              ? 'bg-cruise-card/50 border border-cruise-border/50 opacity-60'
-              : 'bg-cruise-card border border-cruise-border'
-      }`}
+      className="w-full text-left rounded-2xl p-4 press"
+      style={cardStyle}
     >
       <div className="flex items-start gap-3">
         {/* Category color bar */}
         <div
-          className={`w-1 self-stretch rounded-full shrink-0 mt-0.5 ${past ? 'opacity-50' : ''}`}
-          style={{ backgroundColor: config.color }}
+          className="w-1 self-stretch rounded-full shrink-0 mt-0.5"
+          style={{ backgroundColor: config.color, opacity: past ? 0.5 : 1 }}
+          aria-hidden="true"
         />
 
         <div className="flex-1 min-w-0">
           {/* Header row */}
           <div className="flex items-center justify-between gap-2">
-            <h3 className={`font-semibold truncate ${past ? 'text-cruise-muted line-through decoration-cruise-muted/30' : 'text-cruise-text'}`}>
-              {event.isFavorite && <Star className="w-3.5 h-3.5 inline text-amber-400 fill-amber-400 mr-1" />}
-              {event.title}
-              {event.mood && <span className="ml-1.5 text-sm">{event.mood}</span>}
-            </h3>
+            <div className="flex-1 min-w-0 flex items-center gap-1.5">
+              {event.isFavorite && (
+                <Star className="w-4 h-4 shrink-0" style={{ color: 'var(--warning)', fill: 'var(--warning)' }} aria-hidden="true" />
+              )}
+              <Text
+                variant="headline"
+                as="h3"
+                truncate
+                tone={past ? 'muted' : 'default'}
+                className={past ? 'line-through' : ''}
+              >
+                {event.title}
+              </Text>
+              {event.mood && <span className="text-body shrink-0">{event.mood}</span>}
+            </div>
             <div className="flex items-center gap-1.5 shrink-0">
               {photoCount > 0 && (
-                <Camera className="w-3.5 h-3.5 text-ocean-400" />
+                <Camera className="w-4 h-4" style={{ color: 'var(--accent)' }} aria-label={`${photoCount} photos`} />
               )}
               {hasConflict && (
-                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <AlertTriangle className="w-4 h-4" style={{ color: 'var(--warning)' }} aria-hidden="true" />
               )}
               {past && (
-                <CheckCircle className="w-4 h-4 text-emerald-500/60" />
+                <CheckCircle className="w-4 h-4" style={{ color: 'var(--success)' }} aria-hidden="true" />
               )}
             </div>
           </div>
 
-          {/* Time */}
-          <div className="flex items-center gap-1.5 mt-1 text-sm text-cruise-muted">
-            <Clock className="w-3.5 h-3.5" />
-            {formatTimeRange(event.startTime, event.endTime)}
+          {/* Time row */}
+          <div className="flex items-center gap-1.5 mt-1.5 text-subhead" style={{ color: 'var(--fg-muted)' }}>
+            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{formatTimeRange(event.startTime, event.endTime)}</span>
           </div>
 
           {/* Venue */}
           {event.venue && (
-            <div className="flex items-center gap-1.5 mt-0.5 text-sm text-cruise-muted">
-              <MapPin className="w-3.5 h-3.5" />
-              {event.venue}
+            <div className="flex items-center gap-1.5 mt-0.5 text-subhead" style={{ color: 'var(--fg-muted)' }}>
+              <MapPin className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">{event.venue}</span>
               {event.deck != null && (
-                <span className="text-xs opacity-60">Deck {event.deck}</span>
+                <span className="text-caption" style={{ color: 'var(--fg-subtle)' }}>
+                  · Deck {event.deck}
+                </span>
               )}
             </div>
           )}
 
           {/* Members */}
           {assignedMembers.length > 0 && !past && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
               {assignedMembers.map((m) => (
                 <MemberChip key={m.id} member={m} />
               ))}
             </div>
           )}
 
-          {/* Conflict badge */}
-          {hasConflict && (
-            <div className="mt-2">
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full">
-                <AlertTriangle className="w-3 h-3" aria-hidden="true" />
-                Schedule conflict
-              </span>
-            </div>
-          )}
-
           {/* Status badges */}
-          {active && (
-            <div className="mt-2">
-              <span className="text-xs font-medium text-ocean-400 bg-ocean-400/10 px-2 py-0.5 rounded-full">
-                Happening now
-              </span>
-            </div>
-          )}
-          {!active && !past && reminder && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-full">
-                <Timer className="w-3 h-3" />
-                {reminder.minutesUntil != null
-                  ? `Starts in ${reminder.minutesUntil} min`
-                  : 'Starting soon'}
-              </span>
-              {reminder.leaveByTime && reminder.travelMinutes && (
-                <span className="text-xs text-cruise-muted">
-                  Leave by {formatTime(reminder.leaveByTime)} (~{reminder.travelMinutes} min travel)
+          <div className="flex flex-wrap gap-1.5 mt-2.5 empty:hidden">
+            {hasConflict && (
+              <Badge tone="warning" icon={<AlertTriangle className="w-3 h-3" />}>
+                Schedule conflict
+              </Badge>
+            )}
+            {active && (
+              <Badge tone="accent">
+                <span className="inline-flex items-center gap-1">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full animate-pulse"
+                    style={{ backgroundColor: 'var(--accent)' }}
+                    aria-hidden="true"
+                  />
+                  Happening now
                 </span>
-              )}
-            </div>
-          )}
+              </Badge>
+            )}
+            {!active && !past && reminder && (
+              <>
+                <Badge tone="warning" icon={<Timer className="w-3 h-3" />}>
+                  {reminder.minutesUntil != null
+                    ? `Starts in ${reminder.minutesUntil} min`
+                    : 'Starting soon'}
+                </Badge>
+                {reminder.leaveByTime && reminder.travelMinutes && (
+                  <Badge tone="neutral">
+                    Leave by {formatTime(reminder.leaveByTime)} (~{reminder.travelMinutes} min)
+                  </Badge>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     </button>

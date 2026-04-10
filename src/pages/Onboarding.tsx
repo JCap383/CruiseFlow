@@ -1,13 +1,28 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ship, Plus, X } from 'lucide-react';
+import {
+  Ship,
+  Sparkles,
+  Calendar,
+  Users,
+  Camera,
+  Plus,
+  X,
+  ArrowRight,
+  ArrowLeft,
+  Check,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Text } from '@/components/ui/Text';
 import { createCruise } from '@/hooks/useCruise';
 import { addMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
 import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
 import { getKnownShips } from '@/db/seed';
+import { haptics } from '@/utils/haptics';
+
+type Step = 'welcome' | 'cruise' | 'members';
 
 interface MemberDraft {
   name: string;
@@ -15,12 +30,14 @@ interface MemberDraft {
   isChild: boolean;
 }
 
+const STEPS: Step[] = ['welcome', 'cruise', 'members'];
+
 export function Onboarding() {
   const navigate = useNavigate();
   const setActiveCruise = useAppStore((s) => s.setActiveCruise);
   const setSelectedDate = useAppStore((s) => s.setSelectedDate);
 
-  const [step, setStep] = useState<'cruise' | 'members'>('cruise');
+  const [step, setStep] = useState<Step>('welcome');
   const [cruiseName, setCruiseName] = useState('');
   const [shipName, setShipName] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -28,6 +45,20 @@ export function Onboarding() {
   const [dateError, setDateError] = useState('');
   const [members, setMembers] = useState<MemberDraft[]>([]);
   const [newName, setNewName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const stepIndex = STEPS.indexOf(step);
+
+  const goNext = () => {
+    if (step === 'welcome') setStep('cruise');
+    else if (step === 'cruise') setStep('members');
+    void haptics.tap();
+  };
+  const goBack = () => {
+    if (step === 'members') setStep('cruise');
+    else if (step === 'cruise') setStep('welcome');
+    void haptics.tap();
+  };
 
   const addNewMember = () => {
     if (!newName.trim()) return;
@@ -40,6 +71,7 @@ export function Onboarding() {
       },
     ]);
     setNewName('');
+    void haptics.tap();
   };
 
   const removeMember = (idx: number) => {
@@ -53,192 +85,438 @@ export function Onboarding() {
   };
 
   const handleFinish = async () => {
-    const cruiseId = await createCruise({
-      name: cruiseName || shipName || 'My Cruise',
-      shipName,
-      startDate,
-      endDate,
-      coverPhotos: {},
-    });
+    setSubmitting(true);
+    try {
+      const cruiseId = await createCruise({
+        name: cruiseName || shipName || 'My Cruise',
+        shipName,
+        startDate,
+        endDate,
+        coverPhotos: {},
+      });
 
-    await Promise.all(
-      members.map((m, i) =>
-        addMember({
-          cruiseId,
-          name: m.name,
-          emoji: m.emoji,
-          color: MEMBER_COLORS[i % MEMBER_COLORS.length]!,
-          isChild: m.isChild,
-        }),
-      ),
-    );
+      await Promise.all(
+        members.map((m, i) =>
+          addMember({
+            cruiseId,
+            name: m.name,
+            emoji: m.emoji,
+            color: MEMBER_COLORS[i % MEMBER_COLORS.length]!,
+            isChild: m.isChild,
+          }),
+        ),
+      );
 
-    setActiveCruise(cruiseId);
-    if (startDate) setSelectedDate(startDate);
-    navigate('/');
+      setActiveCruise(cruiseId);
+      if (startDate) setSelectedDate(startDate);
+      void haptics.success();
+      navigate('/');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
+  const cruiseStepValid =
+    !!startDate && !!endDate && !dateError && endDate > startDate;
+
   return (
-    <div className="p-6 flex flex-col gap-6 min-h-full justify-center">
-      <div className="text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-ocean-500/20 mb-4">
-          <Ship className="w-8 h-8 text-ocean-400" />
+    <div
+      className="min-h-full flex flex-col"
+      style={{ backgroundColor: 'var(--bg-default)' }}
+    >
+      {/* Progress dots */}
+      <div className="pt-10 pb-4 px-6 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={goBack}
+          disabled={step === 'welcome'}
+          className="w-10 h-10 rounded-full flex items-center justify-center press disabled:opacity-0"
+          style={{ color: 'var(--fg-muted)' }}
+          aria-label="Back"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-2" aria-hidden="true">
+          {STEPS.map((s, i) => (
+            <span
+              key={s}
+              className="h-1.5 rounded-full transition-all"
+              style={{
+                width: i === stepIndex ? 28 : 8,
+                backgroundColor: i <= stepIndex ? 'var(--accent)' : 'var(--border-default)',
+              }}
+            />
+          ))}
         </div>
-        <h1 className="text-2xl font-bold">Welcome to CruiseFlow</h1>
-        <p className="text-cruise-muted mt-1">
-          {step === 'cruise'
-            ? 'Set up your cruise to get started'
-            : 'Add your travel companions'}
-        </p>
+        <div className="w-10" />
       </div>
 
-      {step === 'cruise' ? (
-        <div className="flex flex-col gap-4">
-          <Input
-            id="cruiseName"
-            label="Cruise name"
-            placeholder="e.g. Caribbean Adventure 2026"
-            value={cruiseName}
-            onChange={(e) => setCruiseName(e.target.value)}
+      {/* Step content */}
+      <div className="flex-1 flex flex-col px-6 pb-8">
+        {step === 'welcome' && <WelcomeStep onNext={goNext} />}
+        {step === 'cruise' && (
+          <CruiseStep
+            cruiseName={cruiseName}
+            setCruiseName={setCruiseName}
+            shipName={shipName}
+            setShipName={setShipName}
+            startDate={startDate}
+            endDate={endDate}
+            dateError={dateError}
+            setStartDate={(v) => {
+              setStartDate(v);
+              if (endDate && v && endDate <= v) setDateError('End date must be after start date');
+              else setDateError('');
+            }}
+            setEndDate={(v) => {
+              setEndDate(v);
+              if (startDate && v && v <= startDate) setDateError('End date must be after start date');
+              else setDateError('');
+            }}
+            onNext={goNext}
+            canContinue={cruiseStepValid}
           />
-          <div>
-            <Input
-              id="shipName"
-              label="Ship name"
-              placeholder="e.g. NCL Prima"
-              value={shipName}
-              onChange={(e) => setShipName(e.target.value)}
-            />
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {getKnownShips().map((name) => (
+        )}
+        {step === 'members' && (
+          <MembersStep
+            members={members}
+            newName={newName}
+            setNewName={setNewName}
+            addNewMember={addNewMember}
+            removeMember={removeMember}
+            toggleChild={toggleChild}
+            onFinish={handleFinish}
+            submitting={submitting}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WelcomeStep({ onNext }: { onNext: () => void }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-slide-up">
+      {/* Hero */}
+      <div
+        className="relative w-28 h-28 rounded-[32px] flex items-center justify-center mb-6"
+        style={{
+          background: 'linear-gradient(135deg, var(--accent) 0%, #0369a1 100%)',
+          boxShadow: 'var(--shadow-fab)',
+        }}
+      >
+        <Ship className="w-14 h-14 text-white" strokeWidth={1.5} aria-hidden="true" />
+        <span
+          className="absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
+          style={{ backgroundColor: '#fbbf24', color: '#78350f' }}
+          aria-hidden="true"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+        </span>
+      </div>
+
+      <Text variant="largeTitle" weight="bold" align="center">
+        Welcome to CruiseFlow
+      </Text>
+      <Text variant="callout" tone="muted" align="center" className="mt-2 max-w-xs">
+        Your cruise command center. Plan each day, share with family, and capture the memories.
+      </Text>
+
+      {/* Value props */}
+      <div className="mt-10 w-full max-w-xs flex flex-col gap-3">
+        {[
+          { icon: Calendar, label: 'Plan every day of your trip' },
+          { icon: Users, label: 'Share schedules with your family' },
+          { icon: Camera, label: 'Keep a journal of memories' },
+        ].map(({ icon: Icon, label }) => (
+          <div
+            key={label}
+            className="flex items-center gap-3 px-4 py-3 rounded-2xl"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-default)',
+            }}
+          >
+            <span
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+              aria-hidden="true"
+            >
+              <Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
+            </span>
+            <Text variant="callout">{label}</Text>
+          </div>
+        ))}
+      </div>
+
+      <Button
+        onClick={onNext}
+        size="lg"
+        fullWidth
+        trailingIcon={<ArrowRight className="w-4 h-4" />}
+        className="mt-10 max-w-xs"
+      >
+        Get Started
+      </Button>
+    </div>
+  );
+}
+
+function CruiseStep({
+  cruiseName,
+  setCruiseName,
+  shipName,
+  setShipName,
+  startDate,
+  endDate,
+  dateError,
+  setStartDate,
+  setEndDate,
+  onNext,
+  canContinue,
+}: {
+  cruiseName: string;
+  setCruiseName: (v: string) => void;
+  shipName: string;
+  setShipName: (v: string) => void;
+  startDate: string;
+  endDate: string;
+  dateError: string;
+  setStartDate: (v: string) => void;
+  setEndDate: (v: string) => void;
+  onNext: () => void;
+  canContinue: boolean;
+}) {
+  return (
+    <div className="flex-1 flex flex-col animate-fade-slide-up">
+      <div className="mb-6">
+        <Text variant="title1" weight="bold">Tell us about your trip</Text>
+        <Text variant="callout" tone="muted" className="mt-1">
+          We'll use this to set up your itinerary.
+        </Text>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <Input
+          id="cruiseName"
+          label="Cruise name"
+          placeholder="e.g. Caribbean Adventure 2026"
+          value={cruiseName}
+          onChange={(e) => setCruiseName(e.target.value)}
+        />
+
+        <Input
+          id="shipName"
+          label="Ship name"
+          placeholder="e.g. NCL Prima"
+          value={shipName}
+          onChange={(e) => setShipName(e.target.value)}
+          hint="Selecting a known ship loads its venues automatically."
+        />
+
+        {/* Popular ships */}
+        <div>
+          <div
+            className="text-caption font-semibold uppercase tracking-wider mb-2"
+            style={{ color: 'var(--fg-subtle)' }}
+          >
+            Popular ships
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {getKnownShips().map((name) => {
+              const selected = shipName === name;
+              return (
                 <button
                   key={name}
                   type="button"
                   onClick={() => setShipName(name)}
-                  className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                    shipName === name
-                      ? 'bg-ocean-500 text-white border-ocean-500'
-                      : 'border-cruise-border text-cruise-muted bg-cruise-card'
-                  }`}
+                  className="text-footnote px-3 py-1.5 rounded-full press"
+                  style={{
+                    backgroundColor: selected ? 'var(--accent)' : 'var(--bg-card)',
+                    color: selected ? 'var(--accent-fg)' : 'var(--fg-muted)',
+                    border: `1px solid ${selected ? 'var(--accent)' : 'var(--border-default)'}`,
+                  }}
                 >
                   {name}
                 </button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Dates */}
+        <div
+          className="rounded-2xl p-4"
+          style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Calendar className="w-4 h-4" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+            <Text variant="subhead" weight="semibold">Trip dates</Text>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="startDate"
-              label="Start date"
+              label="Start"
               type="date"
               value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                if (endDate && e.target.value >= endDate) {
-                  setDateError('End date must be after start date');
-                } else {
-                  setDateError('');
-                }
-              }}
+              onChange={(e) => setStartDate(e.target.value)}
+              error={dateError && startDate ? ' ' : undefined}
             />
             <Input
               id="endDate"
-              label="End date"
+              label="End"
               type="date"
               value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                if (startDate && e.target.value <= startDate) {
-                  setDateError('End date must be after start date');
-                } else {
-                  setDateError('');
-                }
-              }}
+              onChange={(e) => setEndDate(e.target.value)}
+              error={dateError ? dateError : undefined}
             />
           </div>
-          {dateError && (
-            <p className="text-xs text-red-400 -mt-2" role="alert">{dateError}</p>
-          )}
-          <Button
-            onClick={() => setStep('members')}
-            className="mt-2"
-            disabled={!startDate || !endDate || !!dateError || endDate <= startDate}
+        </div>
+      </div>
+
+      <Button
+        onClick={onNext}
+        size="lg"
+        fullWidth
+        disabled={!canContinue}
+        trailingIcon={<ArrowRight className="w-4 h-4" />}
+        className="mt-6"
+      >
+        Next: Add Family
+      </Button>
+    </div>
+  );
+}
+
+function MembersStep({
+  members,
+  newName,
+  setNewName,
+  addNewMember,
+  removeMember,
+  toggleChild,
+  onFinish,
+  submitting,
+}: {
+  members: MemberDraft[];
+  newName: string;
+  setNewName: (v: string) => void;
+  addNewMember: () => void;
+  removeMember: (idx: number) => void;
+  toggleChild: (idx: number) => void;
+  onFinish: () => void;
+  submitting: boolean;
+}) {
+  return (
+    <div className="flex-1 flex flex-col animate-fade-slide-up">
+      <div className="mb-6">
+        <Text variant="title1" weight="bold">Who's going?</Text>
+        <Text variant="callout" tone="muted" className="mt-1">
+          Add everyone on the trip so you can assign activities.
+        </Text>
+      </div>
+
+      {/* Member list or empty hint */}
+      {members.length === 0 ? (
+        <div
+          className="rounded-2xl p-6 text-center"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            border: '1px dashed var(--border-strong)',
+          }}
+        >
+          <div
+            className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-2"
+            style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+            aria-hidden="true"
           >
-            Next: Add Family
-          </Button>
+            <Users className="w-6 h-6" />
+          </div>
+          <Text variant="callout" tone="muted">
+            No family members yet — you can skip this or add them below.
+          </Text>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {/* Member list */}
-          <div className="flex flex-col gap-2">
-            {members.map((m, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 bg-cruise-card rounded-xl px-4 py-3 border border-cruise-border"
-              >
-                <span className="text-xl">{m.emoji}</span>
-                <span className="flex-1 font-medium">{m.name}</span>
-                <button
-                  type="button"
-                  onClick={() => toggleChild(i)}
-                  className={`text-xs px-2 py-0.5 rounded-full ${
-                    m.isChild
-                      ? 'bg-pink-500/20 text-pink-400'
-                      : 'bg-cruise-border text-cruise-muted'
-                  }`}
-                >
-                  {m.isChild ? 'Child' : 'Adult'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeMember(i)}
-                  className="text-cruise-muted"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {/* Add member input */}
-          <div className="flex gap-2">
-            <Input
-              id="newMember"
-              placeholder="Name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  addNewMember();
-                }
+        <div className="flex flex-col gap-2">
+          {members.map((m, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-2xl px-4 py-3"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
               }}
-              className="flex-1"
-            />
-            <Button
-              type="button"
-              onClick={addNewMember}
-              variant="secondary"
-              className="shrink-0"
             >
-              <Plus className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <div className="flex gap-3 mt-2">
-            <Button
-              variant="secondary"
-              onClick={() => setStep('cruise')}
-              className="flex-1"
-            >
-              Back
-            </Button>
-            <Button onClick={handleFinish} className="flex-1">
-              Start Planning
-            </Button>
-          </div>
+              <span className="text-xl">{m.emoji}</span>
+              <Text variant="callout" weight="medium" className="flex-1 truncate">
+                {m.name}
+              </Text>
+              <button
+                type="button"
+                onClick={() => toggleChild(i)}
+                className="text-caption px-2.5 py-1 rounded-full press"
+                style={{
+                  backgroundColor: m.isChild ? 'var(--warning-soft)' : 'var(--bg-elevated)',
+                  color: m.isChild ? 'var(--warning)' : 'var(--fg-muted)',
+                }}
+                aria-pressed={m.isChild}
+              >
+                {m.isChild ? 'Child' : 'Adult'}
+              </button>
+              <button
+                type="button"
+                onClick={() => removeMember(i)}
+                className="p-1 press"
+                style={{ color: 'var(--fg-muted)' }}
+                aria-label={`Remove ${m.name}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
         </div>
       )}
+
+      {/* Add new */}
+      <div className="flex gap-2 mt-4">
+        <Input
+          id="newMember"
+          placeholder="Name"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addNewMember();
+            }
+          }}
+          className="flex-1"
+        />
+        <Button
+          type="button"
+          onClick={addNewMember}
+          variant="secondary"
+          size="md"
+          className="shrink-0"
+          aria-label="Add member"
+        >
+          <Plus className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="flex-1" />
+
+      <Button
+        onClick={onFinish}
+        size="lg"
+        fullWidth
+        isLoading={submitting}
+        haptic="success"
+        leadingIcon={<Check className="w-4 h-4" />}
+        className="mt-6"
+      >
+        Start Planning
+      </Button>
     </div>
   );
 }

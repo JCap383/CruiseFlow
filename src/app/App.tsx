@@ -7,6 +7,9 @@ import { useAppStore } from '@/stores/appStore';
 import { platform } from '@/platform';
 import { MigrationScreen } from '@/components/MigrationScreen';
 import { useEventNotifications } from '@/hooks/useEventNotifications';
+import { useThemeController } from '@/hooks/useThemeController';
+import { useNativeAppPolish } from '@/hooks/useNativeAppPolish';
+import { ToastProvider } from '@/components/ui/Toast';
 
 export function App() {
   const cruises = useCruises(); // undefined while loading, Cruise[] once resolved
@@ -20,6 +23,12 @@ export function App() {
     setMigrationDone(true);
   }, []);
 
+  // Apply theme (dark/light/system) to <html data-theme="...">
+  useThemeController();
+
+  // Native iOS polish: status bar, keyboard resize, etc.
+  useNativeAppPolish();
+
   // Seed venues on first load
   useEffect(() => {
     seedVenues();
@@ -31,7 +40,6 @@ export function App() {
   // Auto-select cruise or redirect to onboarding
   useEffect(() => {
     if (!migrationDone) return;
-    // Still loading from DB — do nothing yet
     if (cruises === undefined) return;
 
     if (cruises.length > 0 && !activeCruiseId) {
@@ -44,10 +52,13 @@ export function App() {
     }
   }, [cruises, activeCruiseId, setActiveCruise, migrationDone]);
 
-  // Show migration screen on native if needed
   if (!migrationDone) {
     return <MigrationScreen onComplete={handleMigrationComplete} />;
   }
 
-  return <RouterProvider router={router} />;
+  return (
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>
+  );
 }

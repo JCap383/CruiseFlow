@@ -1,7 +1,16 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { addDays, subDays, format, parse } from 'date-fns';
-import { ChevronLeft, ChevronRight, Plus, Camera, Search, X, Calendar, AlertTriangle } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Camera,
+  Search,
+  X,
+  Calendar,
+  AlertTriangle,
+} from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useAppStore } from '@/stores/appStore';
 import { useCruise } from '@/hooks/useCruise';
@@ -15,6 +24,12 @@ import type { EventPhoto, EventCategory } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
 import { OnThisDay } from '@/components/memories/OnThisDay';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/Button';
+import { Text } from '@/components/ui/Text';
+import { Badge } from '@/components/ui/Badge';
+import { haptics } from '@/utils/haptics';
+import { useToast } from '@/components/ui/Toast';
 
 function compressPhoto(file: File): Promise<string> {
   return new Promise((resolve) => {
@@ -55,6 +70,7 @@ export function DailySchedule() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<EventCategory | null>(null);
   const [memberFilter, setMemberFilter] = useState<string | null>(null);
+  const toast = useToast();
 
   const conflictEventIds = useMemo(() => {
     const ids = new Set<string>();
@@ -65,7 +81,6 @@ export function DailySchedule() {
     return ids;
   }, [conflicts]);
 
-  // Filtered events
   const filteredEvents = useMemo(() => {
     let filtered = events;
     if (searchQuery.trim()) {
@@ -88,7 +103,6 @@ export function DailySchedule() {
 
   const hasActiveFilters = !!searchQuery.trim() || categoryFilter || memberFilter;
 
-  // Find currently active event for quick capture
   const activeEvent = useMemo(
     () => events.find((e) => isCurrentlyActive(e.date, e.startTime, e.endTime)),
     [events],
@@ -106,6 +120,8 @@ export function DailySchedule() {
       await updateEvent(activeEvent.id, {
         photos: [...(activeEvent.photos ?? []), ...newPhotos],
       });
+      toast.success(`Added ${newPhotos.length} photo${newPhotos.length > 1 ? 's' : ''}`);
+      void haptics.success();
     } finally {
       setIsUploading(false);
     }
@@ -118,6 +134,7 @@ export function DailySchedule() {
   const canGoNext = !cruise?.endDate || selectedDate < cruise.endDate;
 
   const goDay = (dir: 'prev' | 'next') => {
+    void haptics.tap();
     const fn = dir === 'prev' ? subDays : addDays;
     setSelectedDate(format(fn(dateObj, 1), 'yyyy-MM-dd'));
   };
@@ -131,34 +148,67 @@ export function DailySchedule() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="sticky top-0 bg-cruise-bg/95 backdrop-blur-md z-10 px-4 pt-2 pb-2 border-b border-cruise-border">
+      <div
+        className="sticky top-0 z-10 px-4 pt-2 pb-3 backdrop-blur-xl"
+        style={{
+          backgroundColor: 'color-mix(in srgb, var(--bg-default) 85%, transparent)',
+          borderBottom: '1px solid var(--border-default)',
+          paddingTop: 'calc(env(safe-area-inset-top) + 8px)',
+        }}
+      >
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-lg font-bold text-cruise-text flex-1 truncate">
+          <Text variant="title2" weight="bold" truncate className="flex-1">
             {cruise?.name ?? 'CruiseFlow'}
-          </h1>
+          </Text>
           <button
             onClick={() => setShowSearch((s) => !s)}
-            className={`p-2 rounded-lg ${showSearch || hasActiveFilters ? 'text-ocean-400 bg-ocean-400/10' : 'text-cruise-muted'}`}
+            className="p-2.5 rounded-full press"
+            style={{
+              backgroundColor: showSearch || hasActiveFilters ? 'var(--accent-soft)' : 'transparent',
+              color: showSearch || hasActiveFilters ? 'var(--accent)' : 'var(--fg-muted)',
+              minWidth: 44,
+              minHeight: 44,
+            }}
             aria-label={showSearch ? 'Close search' : 'Open search'}
             aria-expanded={showSearch}
           >
             <Search className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Day picker */}
         <div className="flex items-center justify-between mt-1">
           <button
             onClick={() => goDay('prev')}
             disabled={!canGoPrev}
-            className="p-2 text-cruise-muted disabled:opacity-20"
+            className="p-2 rounded-full press"
+            style={{
+              color: canGoPrev ? 'var(--fg-muted)' : 'var(--fg-disabled)',
+              minWidth: 44,
+              minHeight: 44,
+            }}
             aria-label="Previous day"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <span className="text-sm font-medium text-ocean-300" aria-live="polite">{dayLabel}</span>
+          <Text
+            variant="callout"
+            weight="semibold"
+            align="center"
+            tone="accent"
+            aria-live="polite"
+          >
+            {dayLabel}
+          </Text>
           <button
             onClick={() => goDay('next')}
             disabled={!canGoNext}
-            className="p-2 text-cruise-muted disabled:opacity-20"
+            className="p-2 rounded-full press"
+            style={{
+              color: canGoNext ? 'var(--fg-muted)' : 'var(--fg-disabled)',
+              minWidth: 44,
+              minHeight: 44,
+            }}
             aria-label="Next day"
           >
             <ChevronRight className="w-5 h-5" />
@@ -167,28 +217,38 @@ export function DailySchedule() {
 
         {/* Search & filters */}
         {showSearch && (
-          <div className="flex flex-col gap-2 mt-2 pb-1">
+          <div className="flex flex-col gap-2 mt-2 pb-1 animate-fade-slide-up">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cruise-muted" aria-hidden="true" />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+                style={{ color: 'var(--fg-subtle)' }}
+                aria-hidden="true"
+              />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search title, venue, notes..."
-                className="w-full bg-cruise-card border border-cruise-border rounded-xl pl-9 pr-9 py-2 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500"
+                className="w-full rounded-xl pl-9 pr-9 py-2 text-body focus:outline-none"
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-default)',
+                  color: 'var(--fg-default)',
+                }}
                 aria-label="Search events"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-cruise-muted"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 press"
+                  style={{ color: 'var(--fg-muted)' }}
                   aria-label="Clear search"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
             </div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
               {(Object.keys(CATEGORY_CONFIG) as EventCategory[]).map((cat) => {
                 const config = CATEGORY_CONFIG[cat];
                 const active = categoryFilter === cat;
@@ -196,12 +256,12 @@ export function DailySchedule() {
                   <button
                     key={cat}
                     onClick={() => setCategoryFilter(active ? null : cat)}
-                    className={`text-xs px-3 py-1 rounded-full border whitespace-nowrap shrink-0 transition-colors ${
-                      active
-                        ? 'text-white border-transparent'
-                        : 'border-cruise-border text-cruise-muted bg-cruise-card'
-                    }`}
-                    style={active ? { backgroundColor: config.color } : undefined}
+                    className="text-footnote px-3 py-1.5 rounded-full whitespace-nowrap shrink-0 press"
+                    style={{
+                      backgroundColor: active ? config.color : 'var(--bg-card)',
+                      color: active ? '#ffffff' : 'var(--fg-muted)',
+                      border: `1px solid ${active ? 'transparent' : 'var(--border-default)'}`,
+                    }}
                     aria-pressed={active}
                   >
                     {config.label}
@@ -210,18 +270,19 @@ export function DailySchedule() {
               })}
             </div>
             {members.length > 0 && (
-              <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
                 {members.map((m) => {
                   const active = memberFilter === m.id;
                   return (
                     <button
                       key={m.id}
                       onClick={() => setMemberFilter(active ? null : m.id)}
-                      className={`text-xs px-3 py-1 rounded-full border whitespace-nowrap shrink-0 flex items-center gap-1 transition-colors ${
-                        active
-                          ? 'bg-ocean-500 text-white border-ocean-500'
-                          : 'border-cruise-border text-cruise-muted bg-cruise-card'
-                      }`}
+                      className="text-footnote px-3 py-1.5 rounded-full whitespace-nowrap shrink-0 flex items-center gap-1 press"
+                      style={{
+                        backgroundColor: active ? 'var(--accent)' : 'var(--bg-card)',
+                        color: active ? 'var(--accent-fg)' : 'var(--fg-muted)',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                      }}
                       aria-pressed={active}
                     >
                       <span>{m.emoji}</span> {m.name}
@@ -233,7 +294,8 @@ export function DailySchedule() {
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="text-xs text-ocean-400 self-start"
+                className="text-footnote self-start"
+                style={{ color: 'var(--accent)' }}
               >
                 Clear filters
               </button>
@@ -245,15 +307,26 @@ export function DailySchedule() {
       {/* On This Day memories */}
       <OnThisDay />
 
-      {/* Conflict warnings */}
+      {/* Conflict banner */}
       {conflicts.length > 0 && (
-        <div className="mx-4 mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl" role="alert">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
+        <div
+          className="mx-4 mt-4 p-3.5 rounded-2xl"
+          style={{
+            backgroundColor: 'var(--warning-soft)',
+            border: '1px solid var(--warning)',
+          }}
+          role="alert"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle
+              className="w-4 h-4 shrink-0 mt-0.5"
+              style={{ color: 'var(--warning)' }}
+              aria-hidden="true"
+            />
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-amber-300 font-medium">
+              <Text variant="subhead" weight="semibold" tone="warning">
                 {conflicts.length} schedule conflict{conflicts.length > 1 ? 's' : ''} detected
-              </p>
+              </Text>
               <ul className="mt-1 space-y-0.5">
                 {conflicts.slice(0, 3).map((c, i) => {
                   const memberNames = members
@@ -261,14 +334,16 @@ export function DailySchedule() {
                     .map((m) => m.name)
                     .join(', ');
                   return (
-                    <li key={i} className="text-xs text-amber-200/80">
-                      &ldquo;{c.eventA.title}&rdquo; overlaps with &ldquo;{c.eventB.title}&rdquo;
-                      {memberNames && ` for ${memberNames}`}
+                    <li key={i} className="text-footnote" style={{ color: 'var(--fg-muted)' }}>
+                      &ldquo;{c.eventA.title}&rdquo; overlaps &ldquo;{c.eventB.title}&rdquo;
+                      {memberNames && ` · ${memberNames}`}
                     </li>
                   );
                 })}
                 {conflicts.length > 3 && (
-                  <li className="text-xs text-amber-200/60">+{conflicts.length - 3} more</li>
+                  <li className="text-footnote" style={{ color: 'var(--fg-subtle)' }}>
+                    +{conflicts.length - 3} more
+                  </li>
                 )}
               </ul>
             </div>
@@ -276,60 +351,82 @@ export function DailySchedule() {
         </div>
       )}
 
-      {/* Events list */}
+      {/* Events */}
       <div className="flex flex-col gap-3 p-4">
         {events.length === 0 ? (
-          <div className="text-center py-16 px-4">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-ocean-500/10 mb-4">
-              <Calendar className="w-8 h-8 text-ocean-400" aria-hidden="true" />
-            </div>
-            <p className="text-cruise-text font-semibold">No events planned for {dayLabel}</p>
-            <p className="text-cruise-muted text-sm mt-1 max-w-xs mx-auto">
-              Add shows, excursions, dinners and more to build your daily schedule.
-            </p>
-            <button
-              onClick={() => navigate('/event/new')}
-              className="mt-5 inline-flex items-center gap-1.5 bg-ocean-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium active:scale-95 transition-transform"
-            >
-              <Plus className="w-4 h-4" />
-              Add your first event
-            </button>
-          </div>
+          <EmptyState
+            icon={<Calendar className="w-8 h-8" />}
+            title={`No events planned for ${dayLabel}`}
+            description="Add shows, excursions, dinners, and more to build your daily schedule."
+            action={
+              <Button
+                onClick={() => navigate('/event/new')}
+                size="lg"
+                leadingIcon={<Plus className="w-4 h-4" />}
+              >
+                Add your first event
+              </Button>
+            }
+          />
         ) : filteredEvents.length === 0 ? (
           <div className="text-center py-12 px-4">
-            <p className="text-cruise-muted text-sm">No events match your filters</p>
+            <Text variant="callout" tone="muted">No events match your filters</Text>
             <button
               onClick={clearFilters}
-              className="mt-3 text-sm text-ocean-400 underline"
+              className="mt-3 text-subhead underline"
+              style={{ color: 'var(--accent)' }}
             >
               Clear filters
             </button>
           </div>
         ) : (
-          filteredEvents.map((event) => (
-            <EventCard
-              key={event.id}
-              event={event}
-              members={members}
-              hasConflict={conflictEventIds.has(event.id)}
-              reminder={reminders.get(event.id)}
-            />
-          ))
+          <>
+            {/* Count badge */}
+            <div className="flex items-center justify-between px-1 -mb-1">
+              <Badge tone="neutral" size="md">
+                {filteredEvents.length} event{filteredEvents.length !== 1 ? 's' : ''}
+              </Badge>
+              {activeEvent && (
+                <Badge tone="accent" size="md">
+                  1 happening now
+                </Badge>
+              )}
+            </div>
+            {filteredEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                members={members}
+                hasConflict={conflictEventIds.has(event.id)}
+                reminder={reminders.get(event.id)}
+              />
+            ))}
+          </>
         )}
       </div>
 
       {isUploading && <LoadingOverlay message="Adding photo..." />}
 
-      {/* Quick capture FAB (only when an event is happening now) */}
+      {/* Quick capture pill (shows only when something is happening now) */}
       {activeEvent && (
         <>
           <button
             onClick={() => captureRef.current?.click()}
-            className="fixed bottom-20 left-4 w-12 h-12 bg-amber-500 text-white rounded-full shadow-lg shadow-amber-500/30 flex items-center justify-center active:scale-95 transition-transform z-30"
-            title={`Add photo to "${activeEvent.title}"`}
+            className="fixed left-4 press flex items-center gap-2 pl-3 pr-4 rounded-full"
+            style={{
+              bottom: 'calc(88px + env(safe-area-inset-bottom))',
+              backgroundColor: 'var(--warning)',
+              color: '#1f1300',
+              boxShadow: '0 10px 25px rgba(251, 191, 36, 0.35)',
+              height: 44,
+              zIndex: 30,
+            }}
             aria-label={`Quick photo capture for ${activeEvent.title}`}
           >
-            <Camera className="w-5 h-5" />
+            <Camera className="w-4 h-4" />
+            <span className="text-footnote font-semibold truncate max-w-[120px]">
+              {activeEvent.title}
+            </span>
           </button>
           <input
             ref={captureRef}
@@ -343,10 +440,20 @@ export function DailySchedule() {
         </>
       )}
 
-      {/* FAB */}
+      {/* Primary FAB */}
       <button
-        onClick={() => navigate('/event/new')}
-        className="fixed bottom-20 right-4 w-14 h-14 bg-ocean-500 text-white rounded-full shadow-lg shadow-ocean-500/30 flex items-center justify-center active:scale-95 transition-transform z-30"
+        onClick={() => {
+          void haptics.tap();
+          navigate('/event/new');
+        }}
+        className="fixed right-4 w-14 h-14 rounded-full flex items-center justify-center press"
+        style={{
+          bottom: 'calc(88px + env(safe-area-inset-bottom))',
+          backgroundColor: 'var(--accent)',
+          color: 'var(--accent-fg)',
+          boxShadow: 'var(--shadow-fab)',
+          zIndex: 30,
+        }}
         aria-label="Add new event"
       >
         <Plus className="w-6 h-6" />
