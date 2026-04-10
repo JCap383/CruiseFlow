@@ -155,15 +155,13 @@ html, body {
   padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
-  /* On iOS installed PWAs, 100vh/100dvh can report values that don't match
-   * the actual visible area in standalone mode. Pinning html/body to the
-   * viewport with position: fixed + inset: 0 guarantees a correct full-
-   * screen layout regardless of how the platform computes viewport units. */
-  position: fixed;
-  inset: 0;
   width: 100%;
-  height: 100%;
+  /* --app-height is written by src/main.tsx from visualViewport/innerHeight.
+   * This is the only viewport measurement iOS standalone PWAs report
+   * consistently — 100vh / 100dvh / 100svh are all unreliable. We keep a
+   * 100dvh fallback for first paint before JS runs. */
   height: 100dvh;
+  height: var(--app-height, 100dvh);
 }
 
 html {
@@ -172,13 +170,16 @@ html {
 }
 
 #root {
-  position: absolute;
-  inset: 0;
-  padding-top: env(safe-area-inset-top);
+  width: 100%;
+  height: 100dvh;
+  height: var(--app-height, 100dvh);
   background-color: var(--bg-default);
   color: var(--fg-default);
   display: flex;
   flex-direction: column;
+  /* Reserve top inset for the status bar / notch. Bottom inset is reserved
+   * by BottomNav (see src/components/layout/BottomNav.tsx). */
+  padding-top: env(safe-area-inset-top);
 }
 
 body {
