@@ -153,7 +153,6 @@ export function DailySchedule() {
         style={{
           backgroundColor: 'color-mix(in srgb, var(--bg-default) 85%, transparent)',
           borderBottom: '1px solid var(--border-default)',
-          paddingTop: 'calc(env(safe-area-inset-top) + 8px)',
         }}
       >
         <div className="flex items-center justify-between gap-2">
