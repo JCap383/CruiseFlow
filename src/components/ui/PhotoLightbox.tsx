@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X, Pencil, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Pencil, Check, Download } from 'lucide-react';
 import type { EventPhoto } from '@/types';
 
 interface PhotoLightboxProps {
@@ -82,6 +82,39 @@ export function PhotoLightbox({ photos, initialIndex, onClose, onUpdateCaption }
     setEditingCaption(false);
   };
 
+  const handleDownload = async () => {
+    if (!photo) return;
+
+    // Try Web Share API with file (works on iOS Safari for "Save to Photos")
+    try {
+      const res = await fetch(photo.dataUrl);
+      const blob = await res.blob();
+      const file = new File(
+        [blob],
+        `cruiseflow-${photo.caption || 'photo'}-${photo.id.slice(0, 6)}.jpg`,
+        { type: 'image/jpeg' },
+      );
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: photo.caption || 'CruiseFlow Photo',
+        });
+        return;
+      }
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+    }
+
+    // Fallback: download via anchor tag
+    const a = document.createElement('a');
+    a.href = photo.dataUrl;
+    a.download = `cruiseflow-${photo.caption || 'photo'}-${photo.id.slice(0, 6)}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   if (!photo) return null;
 
   return (
@@ -90,13 +123,21 @@ export function PhotoLightbox({ photos, initialIndex, onClose, onUpdateCaption }
       onClick={handleBackdropClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
     >
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white"
-      >
-        <X className="w-6 h-6" />
-      </button>
+      {/* Top buttons */}
+      <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 z-10 flex items-center gap-2">
+        <button
+          onClick={handleDownload}
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition-colors"
+        >
+          <Download className="w-5 h-5" />
+        </button>
+        <button
+          onClick={onClose}
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition-colors"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      </div>
 
       {/* Counter */}
       {photos.length > 1 && (
