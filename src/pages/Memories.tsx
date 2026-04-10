@@ -4,7 +4,7 @@ import { format, parse, differenceInDays, addDays } from 'date-fns';
 import { nanoid } from 'nanoid';
 import {
   Camera, Clock, MapPin, Star, Filter, Image as ImageIcon, FileText,
-  Anchor, Share2, FileDown, Navigation, Plus, X, Check, Ship,
+  Anchor, Share2, FileDown, Navigation, Plus, X, Check, Ship, Play,
 } from 'lucide-react';
 import { useAllCruiseEvents, addEvent, updateEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
@@ -24,6 +24,7 @@ import { Sheet } from '@/components/ui/Sheet';
 import { ExportPDF } from '@/components/memories/ExportPDF';
 import { MapView } from '@/components/memories/MapView';
 import { BeforeAfter } from '@/components/memories/BeforeAfter';
+import { StoryViewer, type StoryDay } from '@/components/memories/StoryViewer';
 import { haptics } from '@/utils/haptics';
 import { useToast } from '@/components/ui/Toast';
 
@@ -80,6 +81,10 @@ export function Memories() {
   const qmFileRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showEmptyDays, setShowEmptyDays] = useState(false);
+  const [storyState, setStoryState] = useState<{
+    dayIndex: number;
+    photoIndex: number;
+  } | null>(null);
 
   // Parallax scroll offset for hero cover
   const [scrollY, setScrollY] = useState(0);
@@ -165,6 +170,38 @@ export function Memories() {
         };
       });
   }, [filteredEvents, cruise, showEmptyDays]);
+
+  // Build story data: only days that actually have photos, flattened to
+  // (photo, event) pairs so each photo is its own story "page".
+  const storyDays = useMemo<StoryDay[]>(() => {
+    return memoryDays
+      .map((day) => {
+        const photos = day.events.flatMap((e) =>
+          (e.photos ?? []).map((photo) => ({
+            photo,
+            eventId: e.id,
+            eventTitle: e.title,
+            venue: e.venue || undefined,
+            mood: e.mood,
+            isFavorite: e.isFavorite,
+          })),
+        );
+        return {
+          date: day.date,
+          label: day.label,
+          dayNum: day.dayNum,
+          isSeaDay: day.isSeaDay,
+          photos,
+        };
+      })
+      .filter((d) => d.photos.length > 0);
+  }, [memoryDays]);
+
+  const openStoriesFromStart = () => {
+    if (storyDays.length === 0) return;
+    void haptics.tap();
+    setStoryState({ dayIndex: 0, photoIndex: 0 });
+  };
 
   const handleSetCoverPhoto = async (date: string, dataUrl: string) => {
     if (!activeCruiseId || !cruise) return;
@@ -298,6 +335,16 @@ export function Memories() {
         <div
           className="absolute top-0 left-0 right-0 flex items-center justify-end gap-1 px-3 pt-2"
         >
+          {storyDays.length > 0 && (
+            <button
+              onClick={openStoriesFromStart}
+              className="p-2.5 rounded-full press"
+              style={{ backgroundColor: 'rgba(0,0,0,0.35)', color: '#ffffff', minWidth: 44, minHeight: 44 }}
+              aria-label="Play stories"
+            >
+              <Play className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={() => setShowMapView(true)}
             className="p-2.5 rounded-full press"
@@ -375,6 +422,77 @@ export function Memories() {
             <StatTile value={stats.events} label="Events" />
             <StatTile value={stats.photos} label="Photos" />
             <StatTile value={stats.favorites} label="Faves" />
+          </div>
+        </div>
+      )}
+
+      {/* Stories reel — Instagram-style day bubbles */}
+      {storyDays.length > 0 && (
+        <div className="mt-5">
+          <div className="px-4 flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Play className="w-3.5 h-3.5" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+              <Text variant="caption" weight="semibold" tone="accent" className="uppercase tracking-wider">
+                Stories
+              </Text>
+            </div>
+            <button
+              type="button"
+              onClick={openStoriesFromStart}
+              className="text-caption font-semibold press"
+              style={{ color: 'var(--accent)' }}
+            >
+              Play all
+            </button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto no-scrollbar px-4 pb-2">
+            {storyDays.map((day, i) => (
+              <button
+                key={day.date}
+                type="button"
+                onClick={() => {
+                  void haptics.tap();
+                  setStoryState({ dayIndex: i, photoIndex: 0 });
+                }}
+                className="flex flex-col items-center gap-1.5 shrink-0 press"
+                aria-label={`Play stories for ${day.label}`}
+              >
+                <div
+                  className="rounded-full p-[2.5px]"
+                  style={{
+                    background:
+                      'conic-gradient(from 180deg, #38bdf8, #a855f7, #f472b6, #fbbf24, #38bdf8)',
+                  }}
+                >
+                  <div
+                    className="w-16 h-16 rounded-full overflow-hidden"
+                    style={{
+                      border: '2.5px solid var(--bg-default)',
+                      backgroundColor: 'var(--bg-card)',
+                    }}
+                  >
+                    {day.photos[0] ? (
+                      <img
+                        src={day.photos[0].photo.dataUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Camera
+                          className="w-5 h-5"
+                          style={{ color: 'var(--fg-subtle)' }}
+                          aria-hidden="true"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Text variant="caption" tone="muted" className="max-w-[72px] truncate">
+                  {day.dayNum ? `Day ${day.dayNum}` : day.label.split(',')[0]}
+                </Text>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -762,6 +880,20 @@ export function Memories() {
       {showExportPDF && <ExportPDF onClose={() => setShowExportPDF(false)} />}
       {showMapView && <MapView onClose={() => setShowMapView(false)} />}
       {isUploading && <LoadingOverlay message="Compressing photos..." />}
+
+      {storyState && storyDays.length > 0 && (
+        <StoryViewer
+          days={storyDays}
+          initialDayIndex={storyState.dayIndex}
+          initialPhotoIndex={storyState.photoIndex}
+          shipName={cruise?.shipName}
+          onClose={() => setStoryState(null)}
+          onOpenEvent={(eventId) => {
+            setStoryState(null);
+            navigate(`/event/${eventId}`);
+          }}
+        />
+      )}
     </div>
   );
 }

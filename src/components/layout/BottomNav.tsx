@@ -9,12 +9,21 @@ const tabs = [
   { to: '/settings', icon: Settings, label: 'Settings', end: false },
 ];
 
+/**
+ * Primary navigation tab bar.
+ *
+ * Pinned with position: fixed to the bottom of the visible viewport. This is
+ * belt-and-suspenders alongside the --app-height variable in src/main.tsx —
+ * even if the shell's flex layout computes an incorrect height (e.g. during
+ * an iOS PWA relaunch race, or when Safari's URL bar transitions), the nav
+ * always visually sticks to the viewport bottom.
+ */
 export function BottomNav() {
   const location = useLocation();
 
   return (
     <nav
-      className="shrink-0 z-40 backdrop-blur-xl"
+      className="fixed left-0 right-0 bottom-0 z-40 backdrop-blur-xl"
       style={{
         backgroundColor: 'color-mix(in srgb, var(--bg-surface) 88%, transparent)',
         borderTop: '1px solid var(--border-default)',
@@ -23,7 +32,7 @@ export function BottomNav() {
       role="navigation"
       aria-label="Primary"
     >
-      <div className="flex items-stretch justify-around">
+      <div className="flex items-stretch justify-around max-w-lg w-full mx-auto">
         {tabs.map(({ to, icon: Icon, label, end }) => {
           const isActive = end ? location.pathname === to : location.pathname.startsWith(to);
           return (
