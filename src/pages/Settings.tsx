@@ -291,7 +291,6 @@ export function Settings() {
         style={{
           backgroundColor: 'color-mix(in srgb, var(--bg-default) 85%, transparent)',
           borderBottom: '1px solid var(--border-default)',
-          paddingTop: 'calc(env(safe-area-inset-top) + 8px)',
         }}
       >
         <Text variant="largeTitle" weight="bold">

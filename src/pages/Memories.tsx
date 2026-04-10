@@ -296,8 +296,7 @@ export function Memories() {
         />
         {/* Action bar */}
         <div
-          className="absolute top-0 left-0 right-0 flex items-center justify-end gap-1 px-3"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 8px)' }}
+          className="absolute top-0 left-0 right-0 flex items-center justify-end gap-1 px-3 pt-2"
         >
           <button
             onClick={() => setShowMapView(true)}
