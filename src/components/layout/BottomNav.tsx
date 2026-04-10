@@ -14,16 +14,16 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 backdrop-blur-xl"
+      className="shrink-0 z-40 backdrop-blur-xl"
       style={{
         backgroundColor: 'color-mix(in srgb, var(--bg-surface) 88%, transparent)',
         borderTop: '1px solid var(--border-default)',
-        paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
       role="navigation"
       aria-label="Primary"
     >
-      <div className="flex items-stretch justify-around max-w-lg mx-auto">
+      <div className="flex items-stretch justify-around">
         {tabs.map(({ to, icon: Icon, label, end }) => {
           const isActive = end ? location.pathname === to : location.pathname.startsWith(to);
           return (
@@ -36,9 +36,11 @@ export function BottomNav() {
               }}
               aria-label={label}
               aria-current={isActive ? 'page' : undefined}
-              className="relative flex-1 flex flex-col items-center justify-center gap-1 py-2 px-1 press"
+              className="relative flex-1 flex flex-col items-center justify-center gap-1 px-1 press"
               style={{
-                minHeight: 56,
+                minHeight: 52,
+                paddingTop: 6,
+                paddingBottom: 6,
                 color: isActive ? 'var(--accent)' : 'var(--fg-muted)',
               }}
             >
