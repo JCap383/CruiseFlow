@@ -23,8 +23,12 @@ import {
   SmartphoneNfc,
   Sparkles,
   Check,
+  Anchor,
+  ArrowRightLeft,
 } from 'lucide-react';
-import { useCruise, updateCruise, deleteCruise } from '@/hooks/useCruise';
+import { useCruise, useCruises, updateCruise, deleteCruise } from '@/hooks/useCruise';
+import { ShipPicker } from '@/components/ships/ShipPicker';
+import { getCruiseLineForShip } from '@/db/shipCatalog';
 import { useFamily, addMember, deleteMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
 import type { ThemePreference } from '@/stores/appStore';
@@ -57,6 +61,7 @@ export function Settings() {
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
   const cruise = useCruise(activeCruiseId);
+  const cruises = useCruises() ?? [];
   const members = useFamily();
   const events = useAllCruiseEvents();
   const syncStatus = useSyncStatus();
@@ -65,6 +70,7 @@ export function Settings() {
 
   // Sheet state
   const [showCruiseSheet, setShowCruiseSheet] = useState(false);
+  const [showCruiseSwitcher, setShowCruiseSwitcher] = useState(false);
   const [showFamilySheet, setShowFamilySheet] = useState(false);
   const [showApiSheet, setShowApiSheet] = useState(false);
   const [showThemeSheet, setShowThemeSheet] = useState(false);
@@ -130,10 +136,21 @@ export function Settings() {
   };
 
   const handleDeleteCruise = async () => {
-    if (activeCruiseId) {
-      await deleteCruise(activeCruiseId);
+    if (!activeCruiseId) return;
+    const deletedId = activeCruiseId;
+    await deleteCruise(deletedId);
+    setShowDeleteConfirm(false);
+
+    // If other cruises still exist, fall back to the most recent one so the
+    // user stays inside the app. Otherwise route them through onboarding.
+    const remaining = cruises.filter((c) => c.id !== deletedId);
+    if (remaining.length > 0) {
+      const next = [...remaining].sort((a, b) => b.createdAt - a.createdAt)[0]!;
+      setActiveCruise(next.id);
+      toast.success(`Switched to ${next.name}`);
+      navigate('/');
+    } else {
       setActiveCruise(null);
-      setShowDeleteConfirm(false);
       navigate('/onboarding');
     }
   };
@@ -300,13 +317,36 @@ export function Settings() {
 
       <div className="px-4 pt-4 pb-8 flex flex-col gap-6">
         {/* ── Trip ─────────────────────────────────────────── */}
-        <ListGroup title="Trip">
+        <ListGroup
+          title="Trip"
+          footer={
+            cruises.length > 1
+              ? `You have ${cruises.length} cruises saved. Tap "Switch cruise" to change the active one.`
+              : 'Tap to edit this trip, or use "Switch cruise" to plan another.'
+          }
+        >
           <ListRow
             icon={<Ship className="w-4 h-4" />}
             title={cruise.name}
             subtitle={`${cruise.shipName} · ${cruise.startDate} → ${cruise.endDate}`}
             onClick={openCruiseEditor}
             ariaLabel={`Edit trip ${cruise.name}`}
+          />
+          <ListRow
+            icon={<ArrowRightLeft className="w-4 h-4" />}
+            title="Switch cruise"
+            subtitle={
+              cruises.length > 1
+                ? `${cruises.length} cruises available`
+                : 'Create another cruise to switch'
+            }
+            onClick={() => setShowCruiseSwitcher(true)}
+          />
+          <ListRow
+            icon={<Plus className="w-4 h-4" />}
+            title="New cruise"
+            subtitle="Start planning another trip"
+            onClick={handleNewCruise}
           />
         </ListGroup>
 
@@ -459,12 +499,6 @@ export function Settings() {
         {/* ── Danger Zone ──────────────────────────────────── */}
         <ListGroup title="Danger Zone">
           <ListRow
-            icon={<Plus className="w-4 h-4" />}
-            title="Start a new cruise"
-            subtitle="Keep existing data and plan another trip"
-            onClick={handleNewCruise}
-          />
-          <ListRow
             icon={<Trash2 className="w-4 h-4" />}
             iconBackground="var(--danger-soft)"
             title="Delete this cruise"
@@ -491,11 +525,11 @@ export function Settings() {
             value={cruiseName}
             onChange={(e) => setCruiseName(e.target.value)}
           />
-          <Input
+          <ShipPicker
             id="editShipName"
-            label="Ship name"
+            label="Ship"
             value={shipName}
-            onChange={(e) => setShipName(e.target.value)}
+            onChange={setShipName}
           />
           <div className="flex gap-2 pt-1">
             <Button
@@ -509,6 +543,105 @@ export function Settings() {
               Save
             </Button>
           </div>
+        </div>
+      </Sheet>
+
+      {/* ── Sheet: Switch cruise ────────────────────────────── */}
+      <Sheet
+        open={showCruiseSwitcher}
+        onClose={() => setShowCruiseSwitcher(false)}
+        title="Your cruises"
+      >
+        <div className="px-4 pt-1 pb-4 flex flex-col gap-3">
+          {cruises.length === 0 ? (
+            <Text variant="footnote" tone="muted" align="center" className="py-6">
+              No cruises saved yet.
+            </Text>
+          ) : (
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+              }}
+            >
+              {[...cruises]
+                .sort((a, b) => b.createdAt - a.createdAt)
+                .map((c, i) => {
+                  const active = c.id === activeCruiseId;
+                  const line = getCruiseLineForShip(c.shipName);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        if (!active) {
+                          setActiveCruise(c.id);
+                          void haptics.success();
+                          toast.success(`Switched to ${c.name}`);
+                        }
+                        setShowCruiseSwitcher(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 press text-left"
+                      style={{
+                        borderTop:
+                          i === 0 ? 'none' : '1px solid var(--border-default)',
+                        backgroundColor: active ? 'var(--accent-soft)' : 'transparent',
+                        minHeight: 56,
+                      }}
+                      aria-pressed={active}
+                    >
+                      <span
+                        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: active
+                            ? 'var(--accent)'
+                            : 'var(--bg-surface)',
+                          color: active ? 'var(--accent-fg)' : 'var(--fg-muted)',
+                          border: active ? 'none' : '1px solid var(--border-default)',
+                        }}
+                        aria-hidden="true"
+                      >
+                        <Anchor className="w-4 h-4" />
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className="text-callout font-semibold truncate"
+                          style={{ color: 'var(--fg-default)' }}
+                        >
+                          {c.name}
+                        </div>
+                        <div
+                          className="text-caption truncate"
+                          style={{ color: 'var(--fg-subtle)' }}
+                        >
+                          {c.shipName}
+                          {line ? ` · ${line.shortName}` : ''} · {c.startDate} → {c.endDate}
+                        </div>
+                      </div>
+                      {active && (
+                        <Check
+                          className="w-5 h-5 shrink-0"
+                          style={{ color: 'var(--accent)' }}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+          <Button
+            variant="secondary"
+            fullWidth
+            leadingIcon={<Plus className="w-4 h-4" />}
+            onClick={() => {
+              setShowCruiseSwitcher(false);
+              handleNewCruise();
+            }}
+          >
+            New cruise
+          </Button>
         </div>
       </Sheet>
 

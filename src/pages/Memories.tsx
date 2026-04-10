@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAllCruiseEvents, addEvent, updateEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
-import { useCruise, updateCruise } from '@/hooks/useCruise';
+import { useCruise, useCruises, updateCruise } from '@/hooks/useCruise';
 import { useAppStore } from '@/stores/appStore';
 import { MOOD_OPTIONS } from '@/types';
 import type { EventPhoto, CruiseEvent, MoodRating } from '@/types';
@@ -61,10 +61,26 @@ function StatTile({ value, label }: { value: number; label: string }) {
 
 export function Memories() {
   const navigate = useNavigate();
-  const events = useAllCruiseEvents();
-  const members = useFamily();
   const activeCruiseId = useAppStore((s) => s.activeCruiseId);
-  const cruise = useCruise(activeCruiseId);
+  const allCruises = useCruises() ?? [];
+
+  // Cruise filter — null = "All cruises", a string = a specific cruise id.
+  // Defaults to the active cruise (so existing users land on their current
+  // trip), but users can switch to "All cruises" to see every memory.
+  const [cruiseFilter, setCruiseFilter] = useState<string | null>(activeCruiseId);
+
+  // Keep the filter in sync when the active cruise changes (e.g. the user
+  // just switched cruises in Settings) — but only if the filter was on a
+  // specific cruise. Preserve an explicit "All cruises" selection.
+  useEffect(() => {
+    setCruiseFilter((prev) => (prev === null ? null : activeCruiseId));
+  }, [activeCruiseId]);
+
+  const events = useAllCruiseEvents(cruiseFilter ?? 'all');
+  // Always load family members across all cruises so chips render
+  // correctly even when viewing memories from a non-active cruise.
+  const members = useFamily('all');
+  const cruise = useCruise(cruiseFilter ?? activeCruiseId);
   const toast = useToast();
 
   const [lightboxPhotos, setLightboxPhotos] = useState<EventPhoto[]>([]);
@@ -119,57 +135,106 @@ export function Memories() {
     return filtered;
   }, [events, filterMemberId]);
 
-  // Group events by date
+  // Quick lookup from cruiseId → Cruise so we can show cruise names and
+  // compute day numbers when viewing memories across multiple cruises.
+  const cruiseById = useMemo(() => {
+    const map = new Map<string, (typeof allCruises)[number]>();
+    for (const c of allCruises) map.set(c.id, c);
+    return map;
+  }, [allCruises]);
+
+  const isAllCruises = cruiseFilter === null;
+
+  // Group events by (cruiseId, date) — this keeps memories from the same
+  // calendar date across different cruises separate, which matters when
+  // viewing all cruises at once.
   const memoryDays = useMemo(() => {
-    const byDate = new Map<string, CruiseEvent[]>();
+    interface Bucket {
+      cruiseId: string;
+      date: string;
+      events: CruiseEvent[];
+    }
+    const byKey = new Map<string, Bucket>();
+    const keyOf = (c: string, d: string) => `${c}::${d}`;
+
     for (const e of filteredEvents) {
-      const existing = byDate.get(e.date) ?? [];
-      existing.push(e);
-      byDate.set(e.date, existing);
+      const k = keyOf(e.cruiseId, e.date);
+      const existing = byKey.get(k);
+      if (existing) {
+        existing.events.push(e);
+      } else {
+        byKey.set(k, { cruiseId: e.cruiseId, date: e.date, events: [e] });
+      }
     }
 
-    const dates: string[] = [];
-    if (showEmptyDays && cruise?.startDate && cruise?.endDate) {
+    const buckets: Bucket[] = [];
+
+    // When filtering to a single cruise and "show empty days" is on, include
+    // every date in that cruise's range (so users see Day 1, Day 2, etc.
+    // even if nothing is logged). In all-cruises mode this would be too
+    // noisy, so skip it.
+    if (showEmptyDays && !isAllCruises && cruise?.startDate && cruise?.endDate) {
       const start = parse(cruise.startDate, 'yyyy-MM-dd', new Date());
       const end = parse(cruise.endDate, 'yyyy-MM-dd', new Date());
       const totalDays = differenceInDays(end, start) + 1;
       for (let i = 0; i < totalDays; i++) {
-        dates.push(format(addDays(start, i), 'yyyy-MM-dd'));
+        const date = format(addDays(start, i), 'yyyy-MM-dd');
+        const k = keyOf(cruise.id, date);
+        if (!byKey.has(k)) {
+          byKey.set(k, { cruiseId: cruise.id, date, events: [] });
+        }
       }
+      buckets.push(...byKey.values());
     } else {
-      const datesWithContent = new Set<string>();
-      for (const [date, dayEvents] of byDate.entries()) {
-        const hasContent = dayEvents.some(
-          (e) => (e.photos && e.photos.length > 0) || e.notes || e.isFavorite || e.mood,
+      // Only include buckets with actual photos/notes/favourites/moods
+      for (const bucket of byKey.values()) {
+        const hasContent = bucket.events.some(
+          (e) =>
+            (e.photos && e.photos.length > 0) || e.notes || e.isFavorite || e.mood,
         );
-        if (hasContent) datesWithContent.add(date);
+        if (hasContent) buckets.push(bucket);
       }
-      dates.push(...Array.from(datesWithContent).sort());
     }
 
-    return dates
-      .sort()
-      .map((date) => {
-        const dayEvents = byDate.get(date) ?? [];
-        const sorted = [...dayEvents].sort((a, b) => a.startTime.localeCompare(b.startTime));
-        const dayPhotos = sorted.flatMap((e) => e.photos ?? []);
-        const dayNum = cruise?.startDate
-          ? differenceInDays(parse(date, 'yyyy-MM-dd', new Date()), parse(cruise.startDate, 'yyyy-MM-dd', new Date())) + 1
-          : null;
-        const hasExcursion = sorted.some((e) => e.category === 'excursion');
-        const isSeaDay = !hasExcursion;
+    // Sort: newest cruise first (by createdAt), then by date within cruise
+    buckets.sort((a, b) => {
+      const cA = cruiseById.get(a.cruiseId);
+      const cB = cruiseById.get(b.cruiseId);
+      const createdDiff = (cB?.createdAt ?? 0) - (cA?.createdAt ?? 0);
+      if (createdDiff !== 0) return createdDiff;
+      return a.date.localeCompare(b.date);
+    });
 
-        return {
-          date,
-          label: format(parse(date, 'yyyy-MM-dd', new Date()), 'EEEE, MMMM d'),
-          dayNum,
-          isSeaDay,
-          events: sorted,
-          photoCount: dayPhotos.length,
-          coverPhoto: cruise?.coverPhotos?.[date] ?? dayPhotos[0]?.dataUrl ?? null,
-        };
-      });
-  }, [filteredEvents, cruise, showEmptyDays]);
+    return buckets.map(({ cruiseId, date, events: dayEvents }) => {
+      const bucketCruise = cruiseById.get(cruiseId);
+      const sorted = [...dayEvents].sort((a, b) =>
+        a.startTime.localeCompare(b.startTime),
+      );
+      const dayPhotos = sorted.flatMap((e) => e.photos ?? []);
+      const dayNum = bucketCruise?.startDate
+        ? differenceInDays(
+            parse(date, 'yyyy-MM-dd', new Date()),
+            parse(bucketCruise.startDate, 'yyyy-MM-dd', new Date()),
+          ) + 1
+        : null;
+      const hasExcursion = sorted.some((e) => e.category === 'excursion');
+      const isSeaDay = !hasExcursion;
+
+      return {
+        key: `${cruiseId}::${date}`,
+        cruiseId,
+        cruiseName: bucketCruise?.name ?? 'Cruise',
+        date,
+        label: format(parse(date, 'yyyy-MM-dd', new Date()), 'EEEE, MMMM d'),
+        dayNum,
+        isSeaDay,
+        events: sorted,
+        photoCount: dayPhotos.length,
+        coverPhoto:
+          bucketCruise?.coverPhotos?.[date] ?? dayPhotos[0]?.dataUrl ?? null,
+      };
+    });
+  }, [filteredEvents, cruise, showEmptyDays, cruiseById, isAllCruises]);
 
   // Build story data: only days that actually have photos, flattened to
   // (photo, event) pairs so each photo is its own story "page".
@@ -392,11 +457,13 @@ export function Memories() {
           <div className="flex items-center gap-1.5 mb-1">
             <Ship className="w-4 h-4 text-white" aria-hidden="true" />
             <Text variant="caption" weight="semibold" className="uppercase tracking-wider text-white/80">
-              {cruise?.shipName ?? 'Your Cruise'}
+              {isAllCruises
+                ? `${allCruises.length} ${allCruises.length === 1 ? 'Cruise' : 'Cruises'}`
+                : (cruise?.shipName ?? 'Your Cruise')}
             </Text>
           </div>
           <Text variant="largeTitle" weight="bold" className="text-white">
-            {cruise?.name ?? 'Memories'}
+            {isAllCruises ? 'All Memories' : (cruise?.name ?? 'Memories')}
           </Text>
         </div>
       </div>
@@ -422,6 +489,61 @@ export function Memories() {
             <StatTile value={stats.events} label="Events" />
             <StatTile value={stats.photos} label="Photos" />
             <StatTile value={stats.favorites} label="Faves" />
+          </div>
+        </div>
+      )}
+
+      {/* Cruise filter — shown whenever there's more than one cruise */}
+      {allCruises.length > 1 && (
+        <div className="mt-5">
+          <div
+            className="flex items-center gap-1.5 px-4 mb-2"
+          >
+            <Text variant="caption" weight="semibold" tone="accent" className="uppercase tracking-wider">
+              Cruise
+            </Text>
+          </div>
+          <div className="flex gap-2 overflow-x-auto no-scrollbar px-4 pb-1">
+            <button
+              type="button"
+              onClick={() => {
+                void haptics.tap();
+                setCruiseFilter(null);
+              }}
+              className="text-footnote px-3 py-1.5 rounded-full whitespace-nowrap press"
+              style={{
+                backgroundColor: isAllCruises ? 'var(--accent)' : 'var(--bg-card)',
+                color: isAllCruises ? 'var(--accent-fg)' : 'var(--fg-muted)',
+                border: `1px solid ${isAllCruises ? 'var(--accent)' : 'var(--border-default)'}`,
+              }}
+              aria-pressed={isAllCruises}
+            >
+              All cruises
+            </button>
+            {[...allCruises]
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .map((c) => {
+                const active = cruiseFilter === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      void haptics.tap();
+                      setCruiseFilter(c.id);
+                    }}
+                    className="text-footnote px-3 py-1.5 rounded-full whitespace-nowrap press"
+                    style={{
+                      backgroundColor: active ? 'var(--accent)' : 'var(--bg-card)',
+                      color: active ? 'var(--accent-fg)' : 'var(--fg-muted)',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                    }}
+                    aria-pressed={active}
+                  >
+                    {c.name}
+                  </button>
+                );
+              })}
           </div>
         </div>
       )}
@@ -555,16 +677,23 @@ export function Memories() {
         />
       ) : (
         <div className="flex flex-col">
-          {memoryDays.map(({ date, label, dayNum, isSeaDay, events: dayEvents, photoCount }) => (
-            <div key={date} className="mt-6">
+          {memoryDays.map(({ key, date, label, dayNum, isSeaDay, events: dayEvents, photoCount, cruiseName }) => (
+            <div key={key} className="mt-6">
               {/* Day header */}
               <div className="px-4 flex items-center justify-between mb-3">
                 <div>
-                  {dayNum && (
-                    <Badge tone={isSeaDay ? 'neutral' : 'accent'} size="md">
-                      Day {dayNum} · {isSeaDay ? 'Sea Day' : 'Port Day'}
-                    </Badge>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {dayNum && (
+                      <Badge tone={isSeaDay ? 'neutral' : 'accent'} size="md">
+                        Day {dayNum} · {isSeaDay ? 'Sea Day' : 'Port Day'}
+                      </Badge>
+                    )}
+                    {isAllCruises && (
+                      <Badge tone="neutral" size="md" icon={<Ship className="w-3 h-3" />}>
+                        {cruiseName}
+                      </Badge>
+                    )}
+                  </div>
                   <Text variant="headline" className="mt-1.5">{label}</Text>
                 </div>
                 <div className="flex items-center gap-2">

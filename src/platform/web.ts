@@ -67,6 +67,10 @@ const webDb: PlatformDatabase = {
     return db.events.where('cruiseId').equals(cruiseId).toArray();
   },
 
+  async getAllEvents() {
+    return db.events.toArray();
+  },
+
   async getEvent(id) {
     return db.events.get(id);
   },
