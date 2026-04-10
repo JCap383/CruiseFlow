@@ -18,11 +18,13 @@ import {
 import type { CruiseEvent, EventCategory, FamilyMember } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
 import { Button } from '@/components/ui/Button';
-import { Input, TextArea } from '@/components/ui/Input';
+import { Input, TextArea, Select } from '@/components/ui/Input';
+import { Text } from '@/components/ui/Text';
 import { MemberAvatar } from '@/components/family/MemberAvatar';
 import { platform } from '@/platform';
 import { usePlatformQuery } from '@/platform/usePlatformQuery';
 import { timeToMinutes } from '@/utils/time';
+import { haptics } from '@/utils/haptics';
 
 interface EventFormProps {
   initialData?: CruiseEvent;
@@ -66,34 +68,35 @@ const VENUE_CATEGORY_LABELS: Record<string, string> = {
   service: 'Services',
 };
 
-const REMINDER_OPTIONS: { value: number | null; label: string }[] = [
-  { value: null, label: 'None' },
-  { value: 5, label: '5 min before' },
-  { value: 15, label: '15 min before' },
-  { value: 30, label: '30 min before' },
-  { value: 60, label: '1 hour before' },
-  { value: 120, label: '2 hours before' },
+const REMINDER_OPTIONS = [
+  { value: '', label: 'None' },
+  { value: '5', label: '5 min before' },
+  { value: '15', label: '15 min before' },
+  { value: '30', label: '30 min before' },
+  { value: '60', label: '1 hour before' },
+  { value: '120', label: '2 hours before' },
 ];
 
-// Smart time defaults based on category
 function getDefaultTimes(category: EventCategory): [string, string] {
   switch (category) {
-    case 'dining':
-      return ['18:00', '19:30'];
-    case 'entertainment':
-      return ['20:00', '21:30'];
-    case 'excursion':
-      return ['08:00', '12:00'];
-    case 'kids-club':
-      return ['09:00', '12:00'];
-    case 'reservation':
-      return ['14:00', '15:00'];
-    case 'reminder':
-      return ['12:00', '12:15'];
-    default:
-      return ['12:00', '13:00'];
+    case 'dining':       return ['18:00', '19:30'];
+    case 'entertainment': return ['20:00', '21:30'];
+    case 'excursion':    return ['08:00', '12:00'];
+    case 'kids-club':    return ['09:00', '12:00'];
+    case 'reservation':  return ['14:00', '15:00'];
+    case 'reminder':     return ['12:00', '12:15'];
+    default:             return ['12:00', '13:00'];
   }
 }
+
+type Section = 'basics' | 'timing' | 'details' | 'people';
+
+const SECTIONS: { id: Section; label: string }[] = [
+  { id: 'basics', label: 'Basics' },
+  { id: 'timing', label: 'Time' },
+  { id: 'details', label: 'Details' },
+  { id: 'people', label: 'People' },
+];
 
 export function EventForm({
   initialData,
@@ -104,7 +107,7 @@ export function EventForm({
   onSubmit,
   onCancel,
 }: EventFormProps) {
-  // Parse category-specific metadata out of notes on initial load
+  // Parse category-specific metadata out of notes
   const parseNotes = (raw: string) => {
     let base = raw;
     let bookingData = { status: '', confirmation: '', cost: '' };
@@ -126,6 +129,7 @@ export function EventForm({
 
   const initialParsed = useMemo(() => parseNotes(initialData?.notes ?? ''), [initialData]);
 
+  const [section, setSection] = useState<Section>('basics');
   const [title, setTitle] = useState(initialData?.title ?? '');
   const [startTime, setStartTime] = useState(initialData?.startTime ?? '12:00');
   const [endTime, setEndTime] = useState(initialData?.endTime ?? '13:00');
@@ -133,9 +137,7 @@ export function EventForm({
     initialData?.category ?? 'dining',
   );
   const [venue, setVenue] = useState(initialData?.venue ?? '');
-  const [deck, setDeck] = useState<string>(
-    initialData?.deck?.toString() ?? '',
-  );
+  const [deck, setDeck] = useState<string>(initialData?.deck?.toString() ?? '');
   const [notes, setNotes] = useState(initialParsed.base);
   const [bookingStatus, setBookingStatus] = useState(initialParsed.booking.status);
   const [bookingConfirmation, setBookingConfirmation] = useState(initialParsed.booking.confirmation);
@@ -173,13 +175,10 @@ export function EventForm({
     [],
   );
 
-  // Group venues by category
   const groupedVenues = useMemo(() => {
     const groups: Record<string, { name: string; deck: number }[]> = {};
     const order = ['dining', 'bar', 'entertainment', 'kids', 'pool', 'activity', 'spa', 'service'];
-    for (const cat of order) {
-      groups[cat] = [];
-    }
+    for (const cat of order) groups[cat] = [];
     for (const v of venues) {
       if (!groups[v.category]) groups[v.category] = [];
       groups[v.category]!.push({ name: v.name, deck: v.deck });
@@ -191,9 +190,7 @@ export function EventForm({
     if (!venueFilter) return null;
     const q = venueFilter.toLowerCase();
     return venues.filter(
-      (v) =>
-        v.name.toLowerCase().includes(q) ||
-        v.category.toLowerCase().includes(q),
+      (v) => v.name.toLowerCase().includes(q) || v.category.toLowerCase().includes(q),
     );
   }, [venues, venueFilter]);
 
@@ -224,9 +221,8 @@ export function EventForm({
     setDeck(venueDeck.toString());
     setShowVenuePicker(false);
     setVenueFilter('');
-    if (!title) {
-      setTitle(name);
-    }
+    if (!title) setTitle(name);
+    void haptics.tap();
   };
 
   const selectCategory = (cat: EventCategory) => {
@@ -236,12 +232,14 @@ export function EventForm({
       setStartTime(s);
       setEndTime(e);
     }
+    void haptics.tap();
   };
 
   const toggleMember = (id: string) => {
     setSelectedMembers((prev) =>
       prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id],
     );
+    void haptics.tap();
   };
 
   const validate = (): boolean => {
@@ -262,9 +260,15 @@ export function EventForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      // Jump to first section with an error
+      if (errors.title) setSection('basics');
+      else if (errors.time) setSection('timing');
+      else if (errors.deck) setSection('basics');
+      void haptics.error();
+      return;
+    }
 
-    // Assemble notes with tagged metadata
     let finalNotes = notes.trim();
     if (category === 'excursion' || category === 'reservation') {
       if (bookingStatus || bookingConfirmation || bookingCost) {
@@ -295,373 +299,427 @@ export function EventForm({
     });
   };
 
+  const sectionHasError: Record<Section, boolean> = {
+    basics: !!errors.title || !!errors.deck,
+    timing: !!errors.time,
+    details: false,
+    people: false,
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-      {/* ── Category chips ─────────────────────────────────────────── */}
-      <div>
-        <span className="text-sm text-cruise-muted block mb-2">Category</span>
-        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1" role="radiogroup" aria-label="Event category">
-          {(Object.keys(CATEGORY_CONFIG) as EventCategory[]).map((cat) => {
-            const config = CATEGORY_CONFIG[cat];
-            const Icon = CATEGORY_ICONS[cat];
-            const active = category === cat;
-            return (
-              <button
-                key={cat}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => selectCategory(cat)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
-                  active
-                    ? 'text-white scale-[1.02]'
-                    : 'bg-cruise-card border border-cruise-border text-cruise-muted'
-                }`}
-                style={active ? { backgroundColor: config.color } : undefined}
-              >
-                <Icon className="w-3.5 h-3.5" aria-hidden="true" />
-                {config.label}
-              </button>
-            );
-          })}
-        </div>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+      {/* Segmented control */}
+      <div
+        className="flex p-1 rounded-xl"
+        style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
+        role="tablist"
+        aria-label="Event form sections"
+      >
+        {SECTIONS.map((s) => {
+          const active = section === s.id;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => {
+                void haptics.tap();
+                setSection(s.id);
+              }}
+              className="flex-1 rounded-lg py-1.5 text-subhead font-semibold transition-colors"
+              style={{
+                backgroundColor: active ? 'var(--accent)' : 'transparent',
+                color: active ? 'var(--accent-fg)' : sectionHasError[s.id] ? 'var(--danger)' : 'var(--fg-muted)',
+              }}
+            >
+              {s.label}
+              {sectionHasError[s.id] && !active && <span className="ml-1">•</span>}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── Venue picker ───────────────────────────────────────────── */}
-      <div>
-        <span className="text-sm text-cruise-muted block mb-2">Venue</span>
-        {!showVenuePicker ? (
-          <button
-            type="button"
-            onClick={() => setShowVenuePicker(true)}
-            className="w-full flex items-center gap-2 rounded-xl bg-cruise-card border border-cruise-border px-4 py-2.5 text-left transition-colors"
-            aria-label="Select venue"
-          >
-            <MapPin className="w-4 h-4 text-cruise-muted shrink-0" aria-hidden="true" />
-            <span className={venue ? 'text-cruise-text' : 'text-cruise-muted/50'}>
-              {venue || 'Select a venue...'}
-            </span>
-            {venue && deck && (
-              <span className="text-xs text-cruise-muted ml-auto">Deck {deck}</span>
-            )}
-            <ChevronDown className="w-4 h-4 text-cruise-muted shrink-0 ml-auto" aria-hidden="true" />
-          </button>
-        ) : (
-          <div className="rounded-xl bg-cruise-card border border-cruise-border overflow-hidden">
-            <div className="p-2 border-b border-cruise-border">
-              <input
-                type="text"
-                placeholder="Search venues..."
-                value={venueFilter}
-                onChange={(e) => setVenueFilter(e.target.value)}
-                autoFocus
-                className="w-full bg-cruise-surface rounded-lg px-3 py-2 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none"
-                aria-label="Search venues"
-              />
+      {/* ── BASICS ───────────────────────────────────────────────── */}
+      {section === 'basics' && (
+        <div className="flex flex-col gap-5 animate-fade-slide-up">
+          {/* Category chips */}
+          <div>
+            <Text variant="subhead" tone="muted" className="mb-2">Category</Text>
+            <div
+              className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1"
+              role="radiogroup"
+              aria-label="Event category"
+            >
+              {(Object.keys(CATEGORY_CONFIG) as EventCategory[]).map((cat) => {
+                const config = CATEGORY_CONFIG[cat];
+                const Icon = CATEGORY_ICONS[cat];
+                const active = category === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => selectCategory(cat)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-footnote font-medium whitespace-nowrap shrink-0 press"
+                    style={{
+                      backgroundColor: active ? config.color : 'var(--bg-card)',
+                      color: active ? '#ffffff' : 'var(--fg-muted)',
+                      border: `1px solid ${active ? 'transparent' : 'var(--border-default)'}`,
+                    }}
+                  >
+                    <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                    {config.label}
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            <div className="max-h-64 overflow-y-auto">
-              {venueFilter && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVenue(venueFilter);
-                    setShowVenuePicker(false);
-                    setVenueFilter('');
-                    if (!title) setTitle(venueFilter);
-                  }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-ocean-400 border-b border-cruise-border hover:bg-cruise-surface"
-                >
-                  Use "{venueFilter}" as venue
-                </button>
-              )}
+          {/* Title */}
+          <Input
+            id="title"
+            label="Event title"
+            placeholder="e.g. Dinner, Ice show, Pool time..."
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              if (errors.title) setErrors({ ...errors, title: undefined });
+            }}
+            required
+            error={errors.title}
+          />
 
-              {filteredVenues ? (
-                filteredVenues.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-cruise-muted">
-                    No venues match "{venueFilter}"
-                  </div>
-                ) : (
-                  filteredVenues.map((v) => (
+          {/* Venue picker */}
+          <div>
+            <Text variant="subhead" tone="muted" className="mb-2">Venue</Text>
+            {!showVenuePicker ? (
+              <button
+                type="button"
+                onClick={() => setShowVenuePicker(true)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-left press"
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-lg)',
+                  minHeight: 44,
+                }}
+                aria-label="Select venue"
+              >
+                <MapPin className="w-4 h-4 shrink-0" style={{ color: 'var(--fg-subtle)' }} aria-hidden="true" />
+                <span className="text-body truncate" style={{ color: venue ? 'var(--fg-default)' : 'var(--fg-subtle)' }}>
+                  {venue || 'Select a venue...'}
+                </span>
+                {venue && deck && (
+                  <span className="text-footnote ml-auto" style={{ color: 'var(--fg-muted)' }}>
+                    Deck {deck}
+                  </span>
+                )}
+                <ChevronDown
+                  className="w-4 h-4 shrink-0 ml-auto"
+                  style={{ color: 'var(--fg-subtle)' }}
+                  aria-hidden="true"
+                />
+              </button>
+            ) : (
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
+              >
+                <div className="p-2" style={{ borderBottom: '1px solid var(--border-default)' }}>
+                  <input
+                    type="text"
+                    placeholder="Search venues..."
+                    value={venueFilter}
+                    onChange={(e) => setVenueFilter(e.target.value)}
+                    autoFocus
+                    className="w-full rounded-lg px-3 py-2 text-body focus:outline-none"
+                    style={{
+                      backgroundColor: 'var(--bg-surface)',
+                      color: 'var(--fg-default)',
+                      border: '1px solid var(--border-default)',
+                    }}
+                    aria-label="Search venues"
+                  />
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {venueFilter && (
                     <button
-                      key={v.id}
                       type="button"
-                      onClick={() => selectVenue(v.name, v.deck)}
-                      className="w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-cruise-surface active:bg-cruise-border transition-colors"
+                      onClick={() => {
+                        setVenue(venueFilter);
+                        setShowVenuePicker(false);
+                        setVenueFilter('');
+                        if (!title) setTitle(venueFilter);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-subhead press"
+                      style={{
+                        color: 'var(--accent)',
+                        borderBottom: '1px solid var(--border-default)',
+                      }}
                     >
-                      <span className="text-cruise-text">{v.name}</span>
-                      <span className="text-xs text-cruise-muted">Deck {v.deck}</span>
+                      Use "{venueFilter}" as venue
                     </button>
-                  ))
-                )
-              ) : (
-                Object.entries(groupedVenues).map(([cat, catVenues]) => {
-                  if (catVenues.length === 0) return null;
-                  const CatIcon = VENUE_CATEGORY_ICONS[cat] ?? MapPin;
-                  return (
-                    <div key={cat}>
-                      <div className="px-4 py-2 bg-cruise-surface flex items-center gap-2 sticky top-0">
-                        <CatIcon className="w-3.5 h-3.5 text-cruise-muted" aria-hidden="true" />
-                        <span className="text-xs font-medium text-cruise-muted uppercase tracking-wider">
-                          {VENUE_CATEGORY_LABELS[cat] ?? cat}
-                        </span>
+                  )}
+                  {filteredVenues ? (
+                    filteredVenues.length === 0 ? (
+                      <div className="px-4 py-3 text-subhead" style={{ color: 'var(--fg-muted)' }}>
+                        No venues match "{venueFilter}"
                       </div>
-                      {catVenues.map((v) => (
+                    ) : (
+                      filteredVenues.map((v) => (
                         <button
-                          key={v.name}
+                          key={v.id}
                           type="button"
                           onClick={() => selectVenue(v.name, v.deck)}
-                          className="w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-cruise-surface active:bg-cruise-border transition-colors"
+                          className="w-full text-left px-4 py-2.5 text-subhead flex items-center justify-between press"
                         >
-                          <span className="text-cruise-text">{v.name}</span>
-                          <span className="text-xs text-cruise-muted">
+                          <span style={{ color: 'var(--fg-default)' }}>{v.name}</span>
+                          <span className="text-footnote" style={{ color: 'var(--fg-muted)' }}>
                             Deck {v.deck}
                           </span>
                         </button>
-                      ))}
-                    </div>
-                  );
-                })
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowVenuePicker(false);
-                  setVenueFilter('');
-                }}
-                className="w-full text-center py-2.5 text-sm text-cruise-muted border-t border-cruise-border"
-              >
-                Cancel
-              </button>
-            </div>
+                      ))
+                    )
+                  ) : (
+                    Object.entries(groupedVenues).map(([cat, catVenues]) => {
+                      if (catVenues.length === 0) return null;
+                      const CatIcon = VENUE_CATEGORY_ICONS[cat] ?? MapPin;
+                      return (
+                        <div key={cat}>
+                          <div
+                            className="px-4 py-2 flex items-center gap-2 sticky top-0"
+                            style={{ backgroundColor: 'var(--bg-elevated)' }}
+                          >
+                            <CatIcon className="w-3.5 h-3.5" style={{ color: 'var(--fg-muted)' }} aria-hidden="true" />
+                            <span className="text-caption font-semibold uppercase tracking-wider" style={{ color: 'var(--fg-muted)' }}>
+                              {VENUE_CATEGORY_LABELS[cat] ?? cat}
+                            </span>
+                          </div>
+                          {catVenues.map((v) => (
+                            <button
+                              key={v.name}
+                              type="button"
+                              onClick={() => selectVenue(v.name, v.deck)}
+                              className="w-full text-left px-4 py-2.5 text-subhead flex items-center justify-between press"
+                            >
+                              <span style={{ color: 'var(--fg-default)' }}>{v.name}</span>
+                              <span className="text-footnote" style={{ color: 'var(--fg-muted)' }}>
+                                Deck {v.deck}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setShowVenuePicker(false); setVenueFilter(''); }}
+                    className="w-full text-center py-2.5 text-subhead press"
+                    style={{ color: 'var(--fg-muted)', borderTop: '1px solid var(--border-default)' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* ── Title ──────────────────────────────────────────────────── */}
-      <div>
-        <Input
-          id="title"
-          label="Event title"
-          placeholder="e.g. Dinner, Ice show, Pool time..."
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            if (errors.title) setErrors({ ...errors, title: undefined });
-          }}
-          required
-          aria-invalid={!!errors.title}
-          aria-describedby={errors.title ? 'title-error' : undefined}
-        />
-        {errors.title && (
-          <p id="title-error" className="text-xs text-red-400 mt-1" role="alert">{errors.title}</p>
-        )}
-      </div>
-
-      {/* ── Deck override ──────────────────────────────────────────── */}
-      {venue && !showVenuePicker && (
-        <div>
-          <Input
-            id="deck"
-            label="Deck (optional)"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={30}
-            placeholder="e.g. 7"
-            value={deck}
-            onChange={(e) => {
-              setDeck(e.target.value);
-              if (errors.deck) setErrors({ ...errors, deck: undefined });
-            }}
-            aria-invalid={!!errors.deck}
-            aria-describedby={errors.deck ? 'deck-error' : undefined}
-          />
-          {errors.deck && (
-            <p id="deck-error" className="text-xs text-red-400 mt-1" role="alert">{errors.deck}</p>
+          {/* Deck override */}
+          {venue && !showVenuePicker && (
+            <Input
+              id="deck"
+              label="Deck (optional)"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={30}
+              placeholder="e.g. 7"
+              value={deck}
+              onChange={(e) => {
+                setDeck(e.target.value);
+                if (errors.deck) setErrors({ ...errors, deck: undefined });
+              }}
+              error={errors.deck}
+            />
           )}
         </div>
       )}
 
-      {/* ── Time ───────────────────────────────────────────────────── */}
-      <div>
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            id="startTime"
-            label="Start"
-            type="time"
-            value={startTime}
-            onChange={(e) => {
-              const newStart = e.target.value;
-              setStartTime(newStart);
-              // Auto-set end time to start + 1 hour
-              const [h, m] = newStart.split(':').map(Number);
-              const endH = Math.min((h ?? 0) + 1, 23);
-              setEndTime(`${endH.toString().padStart(2, '0')}:${(m ?? 0).toString().padStart(2, '0')}`);
-              if (errors.time) setErrors({ ...errors, time: undefined });
-            }}
-          />
-          <Input
-            id="endTime"
-            label="End"
-            type="time"
-            value={endTime}
-            onChange={(e) => {
-              setEndTime(e.target.value);
-              if (errors.time) setErrors({ ...errors, time: undefined });
-            }}
-            aria-invalid={!!errors.time}
-            aria-describedby={errors.time ? 'time-error' : undefined}
-          />
-        </div>
-        {errors.time && (
-          <p id="time-error" className="text-xs text-red-400 mt-1" role="alert">{errors.time}</p>
-        )}
-      </div>
-
-      {/* ── Reminder ───────────────────────────────────────────────── */}
-      <div>
-        <label htmlFor="reminder" className="text-sm text-cruise-muted block mb-1.5">
-          Reminder
-        </label>
-        <select
-          id="reminder"
-          value={reminderMinutes ?? ''}
-          onChange={(e) => setReminderMinutes(e.target.value ? parseInt(e.target.value, 10) : null)}
-          className="w-full rounded-xl bg-cruise-card border border-cruise-border px-4 py-2.5 text-cruise-text focus:outline-none focus:border-ocean-500 transition-colors"
-        >
-          {REMINDER_OPTIONS.map((opt) => (
-            <option key={opt.label} value={opt.value ?? ''}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* ── Excursion / Reservation booking details ────────────────── */}
-      {(category === 'excursion' || category === 'reservation') && (
-        <div className="flex flex-col gap-3 p-3 rounded-xl bg-cruise-card/50 border border-cruise-border">
-          <span className="text-xs font-semibold text-cruise-muted uppercase tracking-wider">
-            Booking details
-          </span>
+      {/* ── TIMING ───────────────────────────────────────────────── */}
+      {section === 'timing' && (
+        <div className="flex flex-col gap-5 animate-fade-slide-up">
           <div>
-            <label htmlFor="bookingStatus" className="text-sm text-cruise-muted block mb-1.5">
-              Status
-            </label>
-            <select
-              id="bookingStatus"
-              value={bookingStatus}
-              onChange={(e) => setBookingStatus(e.target.value)}
-              className="w-full rounded-xl bg-cruise-card border border-cruise-border px-4 py-2.5 text-cruise-text focus:outline-none focus:border-ocean-500 transition-colors"
-            >
-              <option value="">Not set</option>
-              <option value="planned">Planned</option>
-              <option value="booked">Booked</option>
-              <option value="waitlist">Waitlisted</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                id="startTime"
+                label="Start"
+                type="time"
+                value={startTime}
+                onChange={(e) => {
+                  const newStart = e.target.value;
+                  setStartTime(newStart);
+                  const [h, m] = newStart.split(':').map(Number);
+                  const endH = Math.min((h ?? 0) + 1, 23);
+                  setEndTime(`${endH.toString().padStart(2, '0')}:${(m ?? 0).toString().padStart(2, '0')}`);
+                  if (errors.time) setErrors({ ...errors, time: undefined });
+                }}
+              />
+              <Input
+                id="endTime"
+                label="End"
+                type="time"
+                value={endTime}
+                onChange={(e) => {
+                  setEndTime(e.target.value);
+                  if (errors.time) setErrors({ ...errors, time: undefined });
+                }}
+                error={errors.time}
+              />
+            </div>
           </div>
-          <Input
-            id="confirmation"
-            label="Confirmation #"
-            placeholder="e.g. BX12345"
-            value={bookingConfirmation}
-            onChange={(e) => setBookingConfirmation(e.target.value)}
-          />
-          <Input
-            id="cost"
-            label="Cost (optional)"
-            placeholder="e.g. $150"
-            value={bookingCost}
-            onChange={(e) => setBookingCost(e.target.value)}
+          <Select
+            id="reminder"
+            label="Reminder"
+            value={reminderMinutes?.toString() ?? ''}
+            onChange={(e) => setReminderMinutes(e.target.value ? parseInt(e.target.value, 10) : null)}
+            options={REMINDER_OPTIONS}
           />
         </div>
       )}
 
-      {/* ── Dining reservation details ─────────────────────────────── */}
-      {category === 'dining' && (
-        <div className="flex flex-col gap-3 p-3 rounded-xl bg-cruise-card/50 border border-cruise-border">
-          <span className="text-xs font-semibold text-cruise-muted uppercase tracking-wider">
-            Dining details
-          </span>
-          <Input
-            id="partySize"
-            label="Party size"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={20}
-            placeholder="e.g. 4"
-            value={partySize}
-            onChange={(e) => setPartySize(e.target.value)}
-          />
-          <div>
-            <label htmlFor="dressCode" className="text-sm text-cruise-muted block mb-1.5">
-              Dress code
-            </label>
-            <select
-              id="dressCode"
-              value={dressCode}
-              onChange={(e) => setDressCode(e.target.value)}
-              className="w-full rounded-xl bg-cruise-card border border-cruise-border px-4 py-2.5 text-cruise-text focus:outline-none focus:border-ocean-500 transition-colors"
+      {/* ── DETAILS ──────────────────────────────────────────────── */}
+      {section === 'details' && (
+        <div className="flex flex-col gap-4 animate-fade-slide-up">
+          {(category === 'excursion' || category === 'reservation') && (
+            <div
+              className="flex flex-col gap-3 p-4 rounded-2xl"
+              style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
             >
-              <option value="">Not set</option>
-              <option value="casual">Casual</option>
-              <option value="smart-casual">Smart casual</option>
-              <option value="formal">Formal</option>
-              <option value="themed">Themed night</option>
-            </select>
-          </div>
-          <Input
-            id="specialRequest"
-            label="Special request"
-            placeholder="e.g. Window table, allergies"
-            value={specialRequest}
-            onChange={(e) => setSpecialRequest(e.target.value)}
+              <Text variant="caption" tone="subtle" weight="semibold" className="uppercase tracking-wider">
+                Booking details
+              </Text>
+              <Select
+                id="bookingStatus"
+                label="Status"
+                value={bookingStatus}
+                onChange={(e) => setBookingStatus(e.target.value)}
+                options={[
+                  { value: '', label: 'Not set' },
+                  { value: 'planned', label: 'Planned' },
+                  { value: 'booked', label: 'Booked' },
+                  { value: 'waitlist', label: 'Waitlisted' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ]}
+              />
+              <Input
+                id="confirmation"
+                label="Confirmation #"
+                placeholder="e.g. BX12345"
+                value={bookingConfirmation}
+                onChange={(e) => setBookingConfirmation(e.target.value)}
+              />
+              <Input
+                id="cost"
+                label="Cost (optional)"
+                placeholder="e.g. $150"
+                value={bookingCost}
+                onChange={(e) => setBookingCost(e.target.value)}
+              />
+            </div>
+          )}
+          {category === 'dining' && (
+            <div
+              className="flex flex-col gap-3 p-4 rounded-2xl"
+              style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-default)' }}
+            >
+              <Text variant="caption" tone="subtle" weight="semibold" className="uppercase tracking-wider">
+                Dining details
+              </Text>
+              <Input
+                id="partySize"
+                label="Party size"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={20}
+                placeholder="e.g. 4"
+                value={partySize}
+                onChange={(e) => setPartySize(e.target.value)}
+              />
+              <Select
+                id="dressCode"
+                label="Dress code"
+                value={dressCode}
+                onChange={(e) => setDressCode(e.target.value)}
+                options={[
+                  { value: '', label: 'Not set' },
+                  { value: 'casual', label: 'Casual' },
+                  { value: 'smart-casual', label: 'Smart casual' },
+                  { value: 'formal', label: 'Formal' },
+                  { value: 'themed', label: 'Themed night' },
+                ]}
+              />
+              <Input
+                id="specialRequest"
+                label="Special request"
+                placeholder="e.g. Window table, allergies"
+                value={specialRequest}
+                onChange={(e) => setSpecialRequest(e.target.value)}
+              />
+            </div>
+          )}
+          <TextArea
+            id="notes"
+            label="Notes"
+            placeholder="Anything else worth remembering..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
           />
         </div>
       )}
 
-      {/* ── Family member selector ─────────────────────────────────── */}
-      {members.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <span className="text-sm text-cruise-muted">Who's going?</span>
-          <div className="flex gap-2 flex-wrap" role="group" aria-label="Select attendees">
-            {members.map((m) => (
-              <div key={m.id} className="flex flex-col items-center gap-1">
-                <MemberAvatar
-                  member={m}
-                  selected={selectedMembers.includes(m.id)}
-                  onClick={() => toggleMember(m.id)}
-                />
-                <span className="text-xs text-cruise-muted">{m.name}</span>
+      {/* ── PEOPLE ───────────────────────────────────────────────── */}
+      {section === 'people' && (
+        <div className="flex flex-col gap-3 animate-fade-slide-up">
+          {members.length === 0 ? (
+            <Text variant="callout" tone="muted">No family members yet. Add some in Settings.</Text>
+          ) : (
+            <>
+              <Text variant="subhead" tone="muted">Who's going?</Text>
+              <div className="flex gap-3 flex-wrap" role="group" aria-label="Select attendees">
+                {members.map((m) => (
+                  <div key={m.id} className="flex flex-col items-center gap-1">
+                    <MemberAvatar
+                      member={m}
+                      selected={selectedMembers.includes(m.id)}
+                      onClick={() => toggleMember(m.id)}
+                    />
+                    <Text variant="caption" tone="muted">{m.name}</Text>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* ── Notes ──────────────────────────────────────────────────── */}
-      <TextArea
-        id="notes"
-        label="Notes (optional)"
-        placeholder="Dress code, confirmation #, etc."
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-      />
-
-      {/* ── Actions ────────────────────────────────────────────────── */}
-      <div className="flex gap-3 mt-1">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={onCancel}
-          className="flex-1"
-        >
+      {/* Actions */}
+      <div
+        className="flex gap-3 pt-3"
+        style={{ borderTop: '1px solid var(--border-default)' }}
+      >
+        <Button type="button" variant="secondary" onClick={onCancel} fullWidth>
           Cancel
         </Button>
-        <Button type="submit" className="flex-1" disabled={!title.trim()}>
+        <Button
+          type="submit"
+          fullWidth
+          disabled={!title.trim()}
+          haptic="success"
+        >
           {initialData ? 'Update' : 'Add Event'}
         </Button>
       </div>

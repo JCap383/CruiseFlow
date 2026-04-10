@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
+import { haptics } from '@/utils/haptics';
 
 interface ConfirmDialogProps {
   title: string;
@@ -25,6 +26,7 @@ export function ConfirmDialog({
 
   useEffect(() => {
     cancelRef.current?.focus();
+    void haptics.warning();
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onCancel();
     };
@@ -32,9 +34,13 @@ export function ConfirmDialog({
     return () => window.removeEventListener('keydown', handleKey);
   }, [onCancel]);
 
+  const iconColor = variant === 'danger' ? 'var(--danger)' : 'var(--warning)';
+  const iconBg = variant === 'danger' ? 'var(--danger-soft)' : 'var(--warning-soft)';
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+      style={{ backgroundColor: 'var(--bg-overlay)' }}
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
@@ -43,32 +49,39 @@ export function ConfirmDialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm bg-cruise-bg border border-cruise-border rounded-2xl p-5 shadow-xl animate-scale-in"
+        className="w-full max-w-sm rounded-3xl p-5 animate-scale-in"
+        style={{
+          backgroundColor: 'var(--bg-surface)',
+          border: '1px solid var(--border-default)',
+          boxShadow: 'var(--shadow-card)',
+        }}
       >
         <div className="flex items-center gap-3 mb-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-            variant === 'danger' ? 'bg-red-500/15' : 'bg-amber-500/15'
-          }`}>
-            <AlertTriangle className={`w-5 h-5 ${
-              variant === 'danger' ? 'text-red-400' : 'text-amber-400'
-            }`} />
-          </div>
-          <h3 id="confirm-title" className="font-bold text-cruise-text">{title}</h3>
-        </div>
-        <p id="confirm-message" className="text-sm text-cruise-muted mb-5 ml-[52px]">{message}</p>
-        <div className="flex gap-3 ml-[52px]">
-          <Button
-            ref={cancelRef}
-            variant="secondary"
-            onClick={onCancel}
-            className="flex-1"
+          <div
+            className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+            style={{ backgroundColor: iconBg, color: iconColor }}
           >
+            <AlertTriangle className="w-5 h-5" aria-hidden="true" />
+          </div>
+          <h3 id="confirm-title" className="text-headline" style={{ color: 'var(--fg-default)' }}>
+            {title}
+          </h3>
+        </div>
+        <p
+          id="confirm-message"
+          className="text-callout mb-5"
+          style={{ color: 'var(--fg-muted)' }}
+        >
+          {message}
+        </p>
+        <div className="flex gap-3">
+          <Button ref={cancelRef} variant="secondary" onClick={onCancel} fullWidth>
             {cancelLabel}
           </Button>
           <Button
             variant={variant === 'danger' ? 'danger' : 'primary'}
             onClick={onConfirm}
-            className="flex-1"
+            fullWidth
           >
             {confirmLabel}
           </Button>

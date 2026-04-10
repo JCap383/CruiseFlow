@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
+/* ============================================================================
+ * Design tokens — dark theme (default) and light theme via [data-theme="light"]
+ * All semantic tokens pass WCAG AA for the intended foreground/background pair.
+ * ========================================================================= */
+
 @theme {
+  /* Ocean brand scale (unchanged, but consumed via semantic tokens below) */
   --color-ocean-50: #f0f9ff;
   --color-ocean-100: #e0f2fe;
   --color-ocean-200: #bae6fd;
@@ -12,13 +18,20 @@
   --color-ocean-800: #075985;
   --color-ocean-900: #0c4a6e;
 
-  --color-cruise-bg: #0c1425;
-  --color-cruise-surface: #1a2332;
-  --color-cruise-card: #243044;
-  --color-cruise-border: #2d3d52;
-  --color-cruise-text: #e2e8f0;
-  --color-cruise-muted: #94a3b8;
+  /* Surface scale — dark */
+  --color-cruise-bg: #0a1120;
+  --color-cruise-surface: #131c2e;
+  --color-cruise-card: #1c2740;
+  --color-cruise-elevated: #233154;
+  --color-cruise-border: #2f3d5c;
+  --color-cruise-border-strong: #425475;
 
+  /* Foreground scale — raised to hit ≥ 4.5:1 on card surfaces */
+  --color-cruise-text: #f1f5fb;
+  --color-cruise-muted: #b1bfd4;
+  --color-cruise-subtle: #8ea0bb;
+
+  /* Categories */
   --color-cat-dining: #f59e0b;
   --color-cat-entertainment: #a855f7;
   --color-cat-excursion: #10b981;
@@ -26,7 +39,112 @@
   --color-cat-reservation: #3b82f6;
   --color-cat-personal: #6366f1;
   --color-cat-reminder: #ef4444;
+
+  /* Typography scale — derived from iOS Human Interface Guidelines
+     Expressed in rem so the user's Dynamic Type / browser font scale works.  */
+  --text-caption: 0.6875rem;   /* 11px */
+  --text-footnote: 0.75rem;    /* 12px */
+  --text-subhead: 0.8125rem;   /* 13px */
+  --text-callout: 0.9375rem;   /* 15px */
+  --text-body: 1rem;           /* 16px */
+  --text-headline: 1.0625rem;  /* 17px semi-bold */
+  --text-title-3: 1.25rem;     /* 20px */
+  --text-title-2: 1.375rem;    /* 22px */
+  --text-title-1: 1.75rem;     /* 28px */
+  --text-large-title: 2.125rem;/* 34px */
+
+  /* Radii */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+
+  /* Motion tokens */
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --ease-standard: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0.0, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+/* ============================================================================
+ * Semantic tokens — components consume these so themes can swap cleanly.
+ * ========================================================================= */
+
+:root,
+[data-theme="dark"] {
+  --fg-default: #f1f5fb;
+  --fg-muted: #b1bfd4;
+  --fg-subtle: #8ea0bb;
+  --fg-disabled: #586480;
+  --fg-inverse: #0a1120;
+
+  --bg-default: #0a1120;
+  --bg-surface: #131c2e;
+  --bg-card: #1c2740;
+  --bg-elevated: #233154;
+  --bg-overlay: rgba(4, 8, 18, 0.72);
+
+  --border-default: #2f3d5c;
+  --border-strong: #425475;
+
+  --accent: #38bdf8;       /* ocean-400 for dark mode, ≥ 7:1 on bg-default */
+  --accent-fg: #041622;
+  --accent-soft: rgba(56, 189, 248, 0.14);
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --success-soft: rgba(52, 211, 153, 0.12);
+  --warning-soft: rgba(251, 191, 36, 0.12);
+  --danger-soft: rgba(248, 113, 113, 0.12);
+
+  --focus-ring: #38bdf8;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --shadow-fab: 0 10px 25px rgba(14, 165, 233, 0.35);
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --fg-default: #0f172a;
+  --fg-muted: #475569;
+  --fg-subtle: #64748b;
+  --fg-disabled: #cbd5e1;
+  --fg-inverse: #ffffff;
+
+  --bg-default: #f4f7fb;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgba(15, 23, 42, 0.48);
+
+  --border-default: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --accent: #0369a1;       /* darker blue so AA passes on white */
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(3, 105, 161, 0.10);
+
+  --success: #047857;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --success-soft: rgba(4, 120, 87, 0.10);
+  --warning-soft: rgba(180, 83, 9, 0.10);
+  --danger-soft: rgba(185, 28, 28, 0.10);
+
+  --focus-ring: #0369a1;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 32px rgba(15, 23, 42, 0.08);
+  --shadow-fab: 0 12px 30px rgba(3, 105, 161, 0.28);
+
+  color-scheme: light;
+}
+
+/* ============================================================================
+ * Base
+ * ========================================================================= */
 
 * {
   -webkit-tap-highlight-color: transparent;
@@ -38,41 +156,171 @@ html, body {
   padding: 0;
 }
 
+html {
+  /* Respect Dynamic Type via browser font scale while keeping a sane floor */
+  font-size: clamp(15px, 1rem, 19px);
+}
+
 #root {
   height: 100%;
   padding-top: env(safe-area-inset-top);
+  background-color: var(--bg-default);
+  color: var(--fg-default);
 }
 
 body {
-  background-color: var(--color-cruise-bg);
-  color: var(--color-cruise-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg-default);
+  color: var(--fg-default);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   overscroll-behavior: none;
+  transition: background-color var(--dur-base) var(--ease-standard),
+              color var(--dur-base) var(--ease-standard);
 }
 
-/* Safe area padding for notched devices */
+/* Focus rings — visible on every interactive element in both themes */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+input, textarea, select {
+  color: var(--fg-default);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--fg-subtle);
+  opacity: 0.75;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Colorize native date/time pickers in dark mode */
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="time"],
+[data-theme="dark"] input[type="month"],
+[data-theme="dark"] input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+/* Safe area helpers */
 .safe-top {
   padding-top: env(safe-area-inset-top);
 }
-
 .safe-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
-@keyframes slide-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+/* ============================================================================
+ * Typography utility classes (semantic, used by the <Text> primitive)
+ * ========================================================================= */
+
+.text-caption   { font-size: var(--text-caption);   line-height: 1.3; letter-spacing: 0.01em; }
+.text-footnote  { font-size: var(--text-footnote);  line-height: 1.35; }
+.text-subhead   { font-size: var(--text-subhead);   line-height: 1.4; }
+.text-callout   { font-size: var(--text-callout);   line-height: 1.45; }
+.text-body      { font-size: var(--text-body);      line-height: 1.5; }
+.text-headline  { font-size: var(--text-headline);  line-height: 1.4; font-weight: 600; letter-spacing: -0.01em; }
+.text-title-3   { font-size: var(--text-title-3);   line-height: 1.3; font-weight: 600; letter-spacing: -0.015em; }
+.text-title-2   { font-size: var(--text-title-2);   line-height: 1.25; font-weight: 700; letter-spacing: -0.015em; }
+.text-title-1   { font-size: var(--text-title-1);   line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; }
+.text-large-title {
+  font-size: var(--text-large-title); line-height: 1.15; font-weight: 800; letter-spacing: -0.025em;
 }
 
-.animate-slide-up {
-  animation: slide-up 0.25s ease-out;
+/* ============================================================================
+ * Motion
+ * ========================================================================= */
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
 }
 
 @keyframes scale-in {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { transform: scale(0.94); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
 }
 
-.animate-scale-in {
-  animation: scale-in 0.15s ease-out;
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
+
+@keyframes fade-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-slide-up      { animation: slide-up var(--dur-base) var(--ease-emphasized); }
+.animate-scale-in      { animation: scale-in var(--dur-fast) var(--ease-spring); }
+.animate-fade-in       { animation: fade-in var(--dur-base) var(--ease-standard); }
+.animate-fade-slide-up { animation: fade-slide-up var(--dur-base) var(--ease-standard); }
+.animate-toast-in      { animation: toast-in var(--dur-base) var(--ease-spring); }
+
+/* Skeleton shimmer */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 0%,
+    var(--bg-elevated) 50%,
+    var(--bg-card) 100%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--radius-md);
+}
+
+/* Reduced motion — flatten to opacity-only transitions */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-slide-up,
+  .animate-scale-in,
+  .animate-fade-slide-up,
+  .animate-toast-in {
+    animation: fade-in 150ms var(--ease-standard);
+  }
+  .skeleton { animation: none; }
+}
+
+/* Subtle active-scale that still feels responsive under reduced motion */
+.press {
+  transition: transform var(--dur-fast) var(--ease-spring),
+              background-color var(--dur-fast) var(--ease-standard);
+}
+.press:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .press:active { transform: none; }
+}
+
+/* Hide scrollbars on horizontal carousels */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }

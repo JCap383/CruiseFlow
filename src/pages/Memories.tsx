@@ -1,25 +1,62 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format, parse, differenceInDays, addDays } from 'date-fns';
 import { nanoid } from 'nanoid';
 import {
-  Camera, Clock, MapPin, Star, Filter, Image, FileText,
-  Anchor, Share2, FileDown, Navigation, Plus, X, Check,
+  Camera, Clock, MapPin, Star, Filter, Image as ImageIcon, FileText,
+  Anchor, Share2, FileDown, Navigation, Plus, X, Check, Ship,
 } from 'lucide-react';
-import { useAllCruiseEvents, addEvent } from '@/hooks/useEvents';
+import { useAllCruiseEvents, addEvent, updateEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
 import { useCruise, updateCruise } from '@/hooks/useCruise';
 import { useAppStore } from '@/stores/appStore';
-import { CATEGORY_CONFIG, MOOD_OPTIONS } from '@/types';
+import { MOOD_OPTIONS } from '@/types';
 import type { EventPhoto, CruiseEvent, MoodRating } from '@/types';
 import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
-import { updateEvent } from '@/hooks/useEvents';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Badge } from '@/components/ui/Badge';
+import { Text } from '@/components/ui/Text';
+import { Button } from '@/components/ui/Button';
+import { Sheet } from '@/components/ui/Sheet';
 import { ExportPDF } from '@/components/memories/ExportPDF';
 import { MapView } from '@/components/memories/MapView';
 import { BeforeAfter } from '@/components/memories/BeforeAfter';
+import { haptics } from '@/utils/haptics';
+import { useToast } from '@/components/ui/Toast';
+
+/** Simple count-up hook for animating stats. */
+function useCountUp(target: number, durationMs = 800) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) { setValue(target); return; }
+    let rafId = 0;
+    const start = performance.now();
+    const from = 0;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setValue(Math.round(from + (target - from) * eased));
+      if (t < 1) rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [target, durationMs]);
+  return value;
+}
+
+function StatTile({ value, label }: { value: number; label: string }) {
+  const animated = useCountUp(value);
+  return (
+    <div className="text-center">
+      <Text variant="title2" weight="bold">{animated}</Text>
+      <Text variant="caption" tone="subtle" className="uppercase tracking-wider">{label}</Text>
+    </div>
+  );
+}
 
 export function Memories() {
   const navigate = useNavigate();
@@ -27,6 +64,8 @@ export function Memories() {
   const members = useFamily();
   const activeCruiseId = useAppStore((s) => s.activeCruiseId);
   const cruise = useCruise(activeCruiseId);
+  const toast = useToast();
+
   const [lightboxPhotos, setLightboxPhotos] = useState<EventPhoto[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(-1);
   const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
@@ -41,6 +80,21 @@ export function Memories() {
   const qmFileRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showEmptyDays, setShowEmptyDays] = useState(false);
+
+  // Parallax scroll offset for hero cover
+  const [scrollY, setScrollY] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = () => setScrollY(window.scrollY || document.documentElement.scrollTop);
+    const appMain = document.querySelector('main');
+    const target = appMain ?? window;
+    const onScroll = () => {
+      if (appMain) setScrollY(appMain.scrollTop);
+      else handler();
+    };
+    target.addEventListener('scroll', onScroll, { passive: true });
+    return () => target.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Trip stats
   const stats = useMemo(() => {
@@ -60,8 +114,7 @@ export function Memories() {
     return filtered;
   }, [events, filterMemberId]);
 
-  // Group events by date. When showEmptyDays is true, include every cruise day
-  // even if it has no events or no content yet.
+  // Group events by date
   const memoryDays = useMemo(() => {
     const byDate = new Map<string, CruiseEvent[]>();
     for (const e of filteredEvents) {
@@ -70,10 +123,8 @@ export function Memories() {
       byDate.set(e.date, existing);
     }
 
-    // Build the list of dates to render
     const dates: string[] = [];
     if (showEmptyDays && cruise?.startDate && cruise?.endDate) {
-      // Every day of the cruise
       const start = parse(cruise.startDate, 'yyyy-MM-dd', new Date());
       const end = parse(cruise.endDate, 'yyyy-MM-dd', new Date());
       const totalDays = differenceInDays(end, start) + 1;
@@ -81,7 +132,6 @@ export function Memories() {
         dates.push(format(addDays(start, i), 'yyyy-MM-dd'));
       }
     } else {
-      // Only days that have at least one event with content
       const datesWithContent = new Set<string>();
       for (const [date, dayEvents] of byDate.entries()) {
         const hasContent = dayEvents.some(
@@ -103,9 +153,6 @@ export function Memories() {
           : null;
         const hasExcursion = sorted.some((e) => e.category === 'excursion');
         const isSeaDay = !hasExcursion;
-        const hasContent = sorted.some(
-          (e) => (e.photos && e.photos.length > 0) || e.notes || e.isFavorite || e.mood,
-        );
 
         return {
           date,
@@ -115,7 +162,6 @@ export function Memories() {
           events: sorted,
           photoCount: dayPhotos.length,
           coverPhoto: cruise?.coverPhotos?.[date] ?? dayPhotos[0]?.dataUrl ?? null,
-          hasContent,
         };
       });
   }, [filteredEvents, cruise, showEmptyDays]);
@@ -125,6 +171,7 @@ export function Memories() {
     await updateCruise(activeCruiseId, {
       coverPhotos: { ...cruise.coverPhotos, [date]: dataUrl },
     });
+    toast.success('Cover photo updated');
   };
 
   const compressPhoto = (file: File): Promise<string> =>
@@ -187,12 +234,13 @@ export function Memories() {
       mood: qmMood,
     });
 
-    // Reset form
     setQmTitle('');
     setQmNotes('');
     setQmMood(null);
     setQmPhotos([]);
     setShowQuickMemory(false);
+    toast.success('Memory saved');
+    void haptics.success();
   };
 
   const handleShareTrip = async () => {
@@ -205,220 +253,291 @@ export function Memories() {
       try { await navigator.share({ title: cruise?.name, text }); } catch { /* cancelled */ }
     } else {
       await navigator.clipboard.writeText(text);
+      toast.info('Summary copied to clipboard');
     }
   };
 
-  return (
-    <div className="flex flex-col">
-      {/* Header */}
-      <div className="px-4 pt-2 pb-2 border-b border-cruise-border">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold">Memories</h1>
-            <p className="text-xs text-cruise-muted mt-0.5">Your cruise journal</p>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowMapView(true)}
-              className="p-2 text-cruise-muted"
-              title="Port Map"
-            >
-              <Navigation className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setShowExportPDF(true)}
-              className="p-2 text-cruise-muted"
-              title="Export PDF"
-            >
-              <FileDown className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`p-2 rounded-lg ${showFilters ? 'text-ocean-400 bg-ocean-400/10' : 'text-cruise-muted'}`}
-            >
-              <Filter className="w-5 h-5" />
-            </button>
-            <button onClick={handleShareTrip} className="p-2 text-cruise-muted">
-              <Share2 className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+  // Hero data
+  const firstCover = memoryDays.find((d) => d.coverPhoto)?.coverPhoto ?? null;
+  const heroParallax = Math.max(-80, -scrollY * 0.4);
+  const heroFade = Math.max(0, 1 - scrollY / 200);
 
-        {/* Filters & toggles */}
-        {showFilters && (
-          <div className="flex flex-col gap-2 mt-2">
-            {members.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <button
-                  onClick={() => setFilterMemberId(null)}
-                  className={`text-xs px-3 py-1.5 rounded-full border whitespace-nowrap ${
-                    !filterMemberId ? 'bg-ocean-500 text-white border-ocean-500' : 'border-cruise-border text-cruise-muted'
-                  }`}
-                >
-                  All
-                </button>
-                {members.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => setFilterMemberId(filterMemberId === m.id ? null : m.id)}
-                    className={`text-xs px-3 py-1.5 rounded-full border whitespace-nowrap flex items-center gap-1 ${
-                      filterMemberId === m.id ? 'bg-ocean-500 text-white border-ocean-500' : 'border-cruise-border text-cruise-muted'
-                    }`}
-                  >
-                    <span>{m.emoji}</span> {m.name}
-                  </button>
-                ))}
-              </div>
-            )}
-            <label className="flex items-center gap-2 text-xs text-cruise-muted cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showEmptyDays}
-                onChange={(e) => setShowEmptyDays(e.target.checked)}
-                className="accent-ocean-500"
-              />
-              Show all cruise days (including empty ones)
-            </label>
-          </div>
+  return (
+    <div ref={scrollContainerRef} className="flex flex-col">
+      {/* Hero */}
+      <div
+        className="relative overflow-hidden"
+        style={{
+          height: 260,
+          backgroundColor: firstCover ? 'transparent' : 'var(--bg-card)',
+        }}
+      >
+        {firstCover ? (
+          <img
+            src={firstCover}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ transform: `translateY(${heroParallax}px) scale(1.08)` }}
+          />
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(135deg, var(--accent) 0%, #075985 100%)',
+            }}
+          />
         )}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.15) 50%, var(--bg-default) 100%)',
+          }}
+        />
+        {/* Action bar */}
+        <div
+          className="absolute top-0 left-0 right-0 flex items-center justify-end gap-1 px-3"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 8px)' }}
+        >
+          <button
+            onClick={() => setShowMapView(true)}
+            className="p-2.5 rounded-full press"
+            style={{ backgroundColor: 'rgba(0,0,0,0.35)', color: '#ffffff', minWidth: 44, minHeight: 44 }}
+            aria-label="Port map"
+          >
+            <Navigation className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setShowExportPDF(true)}
+            className="p-2.5 rounded-full press"
+            style={{ backgroundColor: 'rgba(0,0,0,0.35)', color: '#ffffff', minWidth: 44, minHeight: 44 }}
+            aria-label="Export PDF"
+          >
+            <FileDown className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            className="p-2.5 rounded-full press"
+            style={{
+              backgroundColor: showFilters ? 'var(--accent)' : 'rgba(0,0,0,0.35)',
+              color: '#ffffff',
+              minWidth: 44,
+              minHeight: 44,
+            }}
+            aria-label="Filters"
+            aria-expanded={showFilters}
+          >
+            <Filter className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleShareTrip}
+            className="p-2.5 rounded-full press"
+            style={{ backgroundColor: 'rgba(0,0,0,0.35)', color: '#ffffff', minWidth: 44, minHeight: 44 }}
+            aria-label="Share trip"
+          >
+            <Share2 className="w-5 h-5" />
+          </button>
+        </div>
+        {/* Title */}
+        <div
+          className="absolute bottom-0 left-0 right-0 px-5 pb-4"
+          style={{ opacity: heroFade }}
+        >
+          <div className="flex items-center gap-1.5 mb-1">
+            <Ship className="w-4 h-4 text-white" aria-hidden="true" />
+            <Text variant="caption" weight="semibold" className="uppercase tracking-wider text-white/80">
+              {cruise?.shipName ?? 'Your Cruise'}
+            </Text>
+          </div>
+          <Text variant="largeTitle" weight="bold" className="text-white">
+            {cruise?.name ?? 'Memories'}
+          </Text>
+        </div>
       </div>
 
-      {/* Trip Summary Card */}
+      {/* Stats ribbon */}
       {stats.events > 0 && (
-        <div className="mx-4 mt-3 p-4 bg-gradient-to-br from-ocean-500/20 to-ocean-700/10 rounded-2xl border border-ocean-500/20">
-          <h2 className="text-sm font-bold text-ocean-300 mb-3 flex items-center gap-1.5">
-            <Anchor className="w-4 h-4" />
-            Trip Summary
-          </h2>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <div>
-              <p className="text-lg font-bold text-cruise-text">{stats.days}</p>
-              <p className="text-[10px] text-cruise-muted">Days</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-cruise-text">{stats.events}</p>
-              <p className="text-[10px] text-cruise-muted">Events</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-cruise-text">{stats.photos}</p>
-              <p className="text-[10px] text-cruise-muted">Photos</p>
-            </div>
-            <div>
-              <p className="text-lg font-bold text-cruise-text">{stats.favorites}</p>
-              <p className="text-[10px] text-cruise-muted">Favorites</p>
-            </div>
+        <div
+          className="mx-4 -mt-8 relative z-10 rounded-2xl p-4"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-default)',
+            boxShadow: 'var(--shadow-card)',
+          }}
+        >
+          <div className="flex items-center gap-1.5 mb-3">
+            <Anchor className="w-4 h-4" style={{ color: 'var(--accent)' }} aria-hidden="true" />
+            <Text variant="caption" weight="semibold" tone="accent" className="uppercase tracking-wider">
+              Trip summary
+            </Text>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            <StatTile value={stats.days} label="Days" />
+            <StatTile value={stats.events} label="Events" />
+            <StatTile value={stats.photos} label="Photos" />
+            <StatTile value={stats.favorites} label="Faves" />
           </div>
         </div>
       )}
 
-      {/* Before & After comparison */}
+      {/* Filters */}
+      {showFilters && (
+        <div className="px-4 mt-4 flex flex-col gap-2 animate-fade-slide-up">
+          {members.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              <button
+                onClick={() => setFilterMemberId(null)}
+                className="text-footnote px-3 py-1.5 rounded-full whitespace-nowrap press"
+                style={{
+                  backgroundColor: !filterMemberId ? 'var(--accent)' : 'var(--bg-card)',
+                  color: !filterMemberId ? 'var(--accent-fg)' : 'var(--fg-muted)',
+                  border: `1px solid ${!filterMemberId ? 'var(--accent)' : 'var(--border-default)'}`,
+                }}
+              >
+                All
+              </button>
+              {members.map((m) => {
+                const active = filterMemberId === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setFilterMemberId(active ? null : m.id)}
+                    className="text-footnote px-3 py-1.5 rounded-full whitespace-nowrap flex items-center gap-1 press"
+                    style={{
+                      backgroundColor: active ? 'var(--accent)' : 'var(--bg-card)',
+                      color: active ? 'var(--accent-fg)' : 'var(--fg-muted)',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                    }}
+                  >
+                    <span>{m.emoji}</span> {m.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-footnote cursor-pointer" style={{ color: 'var(--fg-muted)' }}>
+            <input
+              type="checkbox"
+              checked={showEmptyDays}
+              onChange={(e) => setShowEmptyDays(e.target.checked)}
+              className="accent-ocean-500"
+            />
+            Show all cruise days (including empty ones)
+          </label>
+        </div>
+      )}
+
+      {/* Before & After */}
       <BeforeAfter />
 
       {memoryDays.length === 0 ? (
-        <div className="text-center py-16 px-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-ocean-500/10 mb-4">
-            <Camera className="w-7 h-7 text-ocean-400" />
-          </div>
-          <p className="text-cruise-muted font-medium">No memories yet</p>
-          <p className="text-cruise-muted/60 text-xs mt-1">
-            Add photos, notes, or ratings to your events to start building your cruise journal
-          </p>
-        </div>
+        <EmptyState
+          icon={<Camera className="w-8 h-8" />}
+          title="No memories yet"
+          description="Add photos, notes, or ratings to your events to start building your cruise journal."
+        />
       ) : (
         <div className="flex flex-col">
-          {memoryDays.map(({ date, label, dayNum, isSeaDay, events: dayEvents, photoCount, coverPhoto }) => (
-            <div key={date}>
-              {/* Day header with cover photo */}
-              <div className="relative">
-                {coverPhoto && (
-                  <div className="h-32 overflow-hidden">
-                    <img src={coverPhoto} alt="" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 h-32 bg-gradient-to-b from-black/30 via-transparent to-cruise-bg" />
-                  </div>
-                )}
-                <div className={`px-4 py-2 ${coverPhoto ? 'absolute bottom-0 left-0 right-0' : 'border-b border-cruise-border bg-cruise-bg/95 backdrop-blur-md'} z-10`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      {dayNum && (
-                        <span className="text-xs font-bold text-ocean-400">
-                          DAY {dayNum} {isSeaDay ? '· Sea Day' : '· Port Day'}
-                        </span>
-                      )}
-                      <p className="text-sm font-medium text-cruise-text">{label}</p>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-cruise-muted">
-                      {photoCount > 0 && (
-                        <span className="flex items-center gap-0.5">
-                          <Image className="w-3 h-3" /> {photoCount}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-0.5">
-                        <FileText className="w-3 h-3" /> {dayEvents.length}
-                      </span>
-                    </div>
-                  </div>
+          {memoryDays.map(({ date, label, dayNum, isSeaDay, events: dayEvents, photoCount }) => (
+            <div key={date} className="mt-6">
+              {/* Day header */}
+              <div className="px-4 flex items-center justify-between mb-3">
+                <div>
+                  {dayNum && (
+                    <Badge tone={isSeaDay ? 'neutral' : 'accent'} size="md">
+                      Day {dayNum} · {isSeaDay ? 'Sea Day' : 'Port Day'}
+                    </Badge>
+                  )}
+                  <Text variant="headline" className="mt-1.5">{label}</Text>
+                </div>
+                <div className="flex items-center gap-2">
+                  {photoCount > 0 && (
+                    <Badge tone="neutral" icon={<ImageIcon className="w-3 h-3" />}>
+                      {photoCount}
+                    </Badge>
+                  )}
+                  <Badge tone="neutral" icon={<FileText className="w-3 h-3" />}>
+                    {dayEvents.length}
+                  </Badge>
                 </div>
               </div>
 
               {/* Events for this day */}
-              <div className="flex flex-col gap-4 p-4">
+              <div className="flex flex-col gap-4 px-4">
                 {dayEvents.length === 0 && (
                   <button
+                    type="button"
                     onClick={() => {
                       useAppStore.getState().setSelectedDate(date);
                       navigate('/event/new');
                     }}
-                    className="w-full border-2 border-dashed border-cruise-border rounded-xl p-5 text-center text-cruise-muted/60 text-sm hover:border-ocean-500/50 hover:text-cruise-muted transition-colors"
+                    className="w-full rounded-2xl p-5 text-center text-footnote press"
+                    style={{
+                      border: '1.5px dashed var(--border-strong)',
+                      color: 'var(--fg-muted)',
+                    }}
                   >
-                    Nothing planned yet — tap to add your first event for this day
+                    Nothing planned yet — tap to add your first event
                   </button>
                 )}
                 {dayEvents.map((event) => {
-                  const config = CATEGORY_CONFIG[event.category];
                   const assignedMembers = members.filter((m) =>
                     event.memberIds.includes(m.id),
                   );
                   const photos = event.photos ?? [];
-
                   return (
                     <button
                       key={event.id}
-                      onClick={() => navigate(`/event/${event.id}`)}
-                      className="w-full text-left"
+                      type="button"
+                      onClick={() => {
+                        void haptics.tap();
+                        navigate(`/event/${event.id}`);
+                      }}
+                      className="w-full text-left press"
                     >
                       <div className="flex gap-3">
-                        {/* Timeline dot */}
+                        {/* Timeline rail */}
                         <div className="flex flex-col items-center pt-1.5">
                           <div
                             className="w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: config.color }}
+                            style={{ backgroundColor: 'var(--accent)' }}
                           />
-                          <div className="w-0.5 flex-1 bg-cruise-border mt-1" />
+                          <div
+                            className="w-0.5 flex-1 mt-1"
+                            style={{ backgroundColor: 'var(--border-default)' }}
+                          />
                         </div>
 
-                        <div className="flex-1 min-w-0 pb-4">
-                          {/* Event title & meta */}
+                        <div className="flex-1 min-w-0 pb-5">
                           <div className="flex items-center gap-1.5">
-                            {event.isFavorite && <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" />}
-                            <h3 className="font-semibold text-cruise-text truncate">
+                            {event.isFavorite && (
+                              <Star
+                                className="w-3.5 h-3.5 shrink-0"
+                                style={{ color: 'var(--warning)', fill: 'var(--warning)' }}
+                                aria-hidden="true"
+                              />
+                            )}
+                            <Text variant="headline" as="h3" truncate>
                               {event.title}
-                            </h3>
-                            {event.mood && <span className="text-sm shrink-0">{event.mood}</span>}
+                            </Text>
+                            {event.mood && <span className="text-body shrink-0">{event.mood}</span>}
                           </div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-cruise-muted">
+                          <div
+                            className="flex items-center gap-3 mt-1 text-footnote"
+                            style={{ color: 'var(--fg-muted)' }}
+                          >
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
+                              <Clock className="w-3 h-3" aria-hidden="true" />
                               {formatTimeRange(event.startTime, event.endTime)}
                             </span>
                             {event.venue && (
-                              <span className="flex items-center gap-1">
-                                <MapPin className="w-3 h-3" />
-                                {event.venue}
+                              <span className="flex items-center gap-1 truncate">
+                                <MapPin className="w-3 h-3 shrink-0" aria-hidden="true" />
+                                <span className="truncate">{event.venue}</span>
                               </span>
                             )}
                           </div>
 
-                          {/* Members */}
                           {assignedMembers.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
                               {assignedMembers.map((m) => (
@@ -427,45 +546,60 @@ export function Memories() {
                             </div>
                           )}
 
-                          {/* Notes */}
                           {event.notes && (
-                            <p className="text-sm text-cruise-text/80 mt-2 bg-cruise-card rounded-xl p-3 border border-cruise-border whitespace-pre-wrap">
+                            <div
+                              className="text-subhead mt-2 rounded-xl p-3 whitespace-pre-wrap"
+                              style={{
+                                backgroundColor: 'var(--bg-card)',
+                                border: '1px solid var(--border-default)',
+                                color: 'var(--fg-default)',
+                              }}
+                            >
                               {event.notes}
-                            </p>
+                            </div>
                           )}
 
-                          {/* Photos grid */}
                           {photos.length > 0 && (
                             <div className="grid grid-cols-3 gap-1.5 mt-2">
                               {photos.map((photo, photoIdx) => (
                                 <div
                                   key={photo.id}
                                   role="button"
+                                  tabIndex={0}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setLightboxPhotos(photos);
                                     setLightboxIndex(photoIdx);
                                   }}
-                                  className="aspect-square rounded-lg overflow-hidden bg-cruise-surface relative group"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setLightboxPhotos(photos);
+                                      setLightboxIndex(photoIdx);
+                                    }
+                                  }}
+                                  className="aspect-square rounded-xl overflow-hidden relative group press"
+                                  style={{ backgroundColor: 'var(--bg-surface)' }}
                                 >
                                   <img
                                     src={photo.dataUrl}
                                     alt={photo.caption || ''}
                                     className="w-full h-full object-cover"
                                   />
-                                  {/* Set as cover photo */}
                                   <button
+                                    type="button"
                                     onClick={(ev) => {
                                       ev.stopPropagation();
                                       handleSetCoverPhoto(event.date, photo.dataUrl);
                                     }}
-                                    className="absolute bottom-0.5 left-0.5 text-[8px] bg-black/60 text-white/80 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="absolute bottom-1 left-1 text-caption bg-black/60 text-white/90 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 group-focus:opacity-100"
                                   >
                                     Cover
                                   </button>
                                   {photo.caption && (
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-1.5 py-0.5">
-                                      <p className="text-[9px] text-white/90 truncate">{photo.caption}</p>
+                                      <p className="text-caption text-white/90 truncate">{photo.caption}</p>
                                     </div>
                                   )}
                                 </div>
@@ -489,7 +623,6 @@ export function Memories() {
           initialIndex={lightboxIndex}
           onClose={() => setLightboxIndex(-1)}
           onUpdateCaption={async (photoId, caption) => {
-            // Find which event this photo belongs to and update it
             for (const event of events) {
               const photos = event.photos ?? [];
               const photoIdx = photos.findIndex((p) => p.id === photoId);
@@ -505,115 +638,127 @@ export function Memories() {
           }}
         />
       )}
+
       {/* Quick Memory FAB */}
       <button
-        onClick={() => setShowQuickMemory(true)}
-        className="fixed bottom-20 right-4 w-14 h-14 bg-ocean-500 text-white rounded-full shadow-lg shadow-ocean-500/30 flex items-center justify-center active:scale-95 transition-transform z-30"
-        title="Add Quick Memory"
+        onClick={() => {
+          void haptics.tap();
+          setShowQuickMemory(true);
+        }}
+        className="fixed right-4 w-14 h-14 rounded-full flex items-center justify-center press"
+        style={{
+          bottom: 'calc(88px + env(safe-area-inset-bottom))',
+          backgroundColor: 'var(--accent)',
+          color: 'var(--accent-fg)',
+          boxShadow: 'var(--shadow-fab)',
+          zIndex: 30,
+        }}
+        aria-label="Add quick memory"
       >
         <Plus className="w-6 h-6" />
       </button>
 
-      {/* Quick Memory Bottom Sheet */}
-      {showQuickMemory && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={() => setShowQuickMemory(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-cruise-bg border-t border-cruise-border rounded-t-2xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))] animate-slide-up max-h-[85vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-cruise-text">Quick Memory</h3>
-              <button onClick={() => setShowQuickMemory(false)} className="text-cruise-muted p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Quick Memory Sheet */}
+      <Sheet open={showQuickMemory} onClose={() => setShowQuickMemory(false)} title="Quick Memory">
+        <div className="px-4 pb-4 flex flex-col gap-3">
+          <input
+            value={qmTitle}
+            onChange={(e) => setQmTitle(e.target.value)}
+            placeholder="What's this memory?"
+            className="w-full rounded-xl px-4 py-2.5 text-body focus:outline-none"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--fg-default)',
+            }}
+          />
+          <textarea
+            value={qmNotes}
+            onChange={(e) => setQmNotes(e.target.value)}
+            placeholder="Add a note..."
+            rows={3}
+            className="w-full rounded-xl px-4 py-2.5 text-body focus:outline-none resize-none"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-default)',
+              color: 'var(--fg-default)',
+            }}
+          />
 
-            {/* Title */}
-            <input
-              value={qmTitle}
-              onChange={(e) => setQmTitle(e.target.value)}
-              placeholder="What's this memory? (optional)"
-              className="w-full bg-cruise-card border border-cruise-border rounded-xl px-4 py-2.5 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500 transition-colors mb-3"
-            />
-
-            {/* Notes */}
-            <textarea
-              value={qmNotes}
-              onChange={(e) => setQmNotes(e.target.value)}
-              placeholder="Add a note..."
-              rows={3}
-              className="w-full bg-cruise-card border border-cruise-border rounded-xl px-4 py-2.5 text-sm text-cruise-text placeholder:text-cruise-muted/50 focus:outline-none focus:border-ocean-500 transition-colors mb-3 resize-none"
-            />
-
-            {/* Mood */}
-            <div className="flex gap-2 mb-3">
-              {MOOD_OPTIONS.map(({ emoji, label }) => (
+          <div className="flex gap-2">
+            {MOOD_OPTIONS.map(({ emoji, label }) => {
+              const active = qmMood === emoji;
+              return (
                 <button
                   key={emoji}
-                  onClick={() => setQmMood(qmMood === emoji ? null : emoji)}
-                  className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border transition-colors flex-1 ${
-                    qmMood === emoji
-                      ? 'bg-ocean-500/20 border-ocean-500'
-                      : 'bg-cruise-card border-cruise-border'
-                  }`}
+                  type="button"
+                  onClick={() => setQmMood(active ? null : emoji)}
+                  className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl flex-1 press"
+                  style={{
+                    backgroundColor: active ? 'var(--accent-soft)' : 'var(--bg-card)',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                  }}
+                  aria-pressed={active}
                 >
-                  <span className="text-lg">{emoji}</span>
-                  <span className="text-[9px] text-cruise-muted">{label}</span>
+                  <span className="text-lg" aria-hidden="true">{emoji}</span>
+                  <span className="text-caption" style={{ color: 'var(--fg-muted)' }}>{label}</span>
                 </button>
-              ))}
-            </div>
-
-            {/* Photos */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-cruise-muted">
-                  Photos {qmPhotos.length > 0 && `(${qmPhotos.length})`}
-                </span>
-                <button
-                  onClick={() => qmFileRef.current?.click()}
-                  className="flex items-center gap-1 text-xs text-ocean-400 bg-ocean-400/10 px-2.5 py-1 rounded-full"
-                >
-                  <Camera className="w-3 h-3" />
-                  Add
-                </button>
-                <input
-                  ref={qmFileRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => { handleQmAddPhotos(e.target.files); e.target.value = ''; }}
-                />
-              </div>
-              {qmPhotos.length > 0 && (
-                <div className="grid grid-cols-4 gap-1.5">
-                  {qmPhotos.map((photo, idx) => (
-                    <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden">
-                      <img src={photo.dataUrl} alt="" className="w-full h-full object-cover" />
-                      <button
-                        onClick={() => setQmPhotos((prev) => prev.filter((_, i) => i !== idx))}
-                        className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
-                      >
-                        <X className="w-3 h-3 text-white" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Save button */}
-            <button
-              onClick={handleCreateQuickMemory}
-              disabled={!qmTitle.trim() && !qmNotes.trim() && qmPhotos.length === 0 && !qmMood}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-ocean-500 text-white font-medium text-sm disabled:opacity-30 active:scale-[0.98] transition-all"
-            >
-              <Check className="w-4 h-4" />
-              Save Memory
-            </button>
+              );
+            })}
           </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Text variant="footnote" tone="muted">
+                Photos {qmPhotos.length > 0 && `(${qmPhotos.length})`}
+              </Text>
+              <button
+                type="button"
+                onClick={() => qmFileRef.current?.click()}
+                className="flex items-center gap-1 text-footnote px-2.5 py-1 rounded-full press"
+                style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent)' }}
+              >
+                <Camera className="w-3 h-3" /> Add
+              </button>
+              <input
+                ref={qmFileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => { handleQmAddPhotos(e.target.files); e.target.value = ''; }}
+              />
+            </div>
+            {qmPhotos.length > 0 && (
+              <div className="grid grid-cols-4 gap-1.5">
+                {qmPhotos.map((photo, idx) => (
+                  <div key={photo.id} className="relative aspect-square rounded-lg overflow-hidden">
+                    <img src={photo.dataUrl} alt="" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setQmPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center"
+                      aria-label="Remove photo"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Button
+            onClick={handleCreateQuickMemory}
+            disabled={!qmTitle.trim() && !qmNotes.trim() && qmPhotos.length === 0 && !qmMood}
+            fullWidth
+            size="lg"
+            leadingIcon={<Check className="w-4 h-4" />}
+          >
+            Save Memory
+          </Button>
         </div>
-      )}
+      </Sheet>
 
       {showExportPDF && <ExportPDF onClose={() => setShowExportPDF(false)} />}
       {showMapView && <MapView onClose={() => setShowMapView(false)} />}

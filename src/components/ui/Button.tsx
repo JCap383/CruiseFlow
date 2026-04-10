@@ -1,38 +1,122 @@
 import { forwardRef } from 'react';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
+import { Loader2 } from 'lucide-react';
+import { haptics } from '@/utils/haptics';
+
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Size = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: Variant;
+  size?: Size;
+  fullWidth?: boolean;
+  isLoading?: boolean;
+  leadingIcon?: ReactNode;
+  trailingIcon?: ReactNode;
   children: ReactNode;
+  /** Haptic to fire on press. Default 'tap' for primary, none for ghost. */
+  haptic?: 'tap' | 'medium' | 'success' | 'warning' | 'none';
 }
 
-const variants = {
-  primary: 'bg-ocean-500 text-white active:bg-ocean-600',
-  secondary: 'bg-cruise-card text-cruise-text border border-cruise-border active:bg-cruise-border',
-  ghost: 'text-cruise-muted active:bg-cruise-card',
-  danger: 'bg-red-600 text-white active:bg-red-700',
+const sizeClass: Record<Size, string> = {
+  sm: 'px-3 py-2 text-footnote',
+  md: 'px-4 py-2.5 text-callout',
+  lg: 'px-5 py-3.5 text-headline',
 };
 
-const sizes = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2.5 text-sm',
-  lg: 'px-6 py-3 text-base',
+const sizeMinHeight: Record<Size, number> = {
+  sm: 36,
+  md: 44,
+  lg: 52,
 };
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  function Button(
-    { variant = 'primary', size = 'md', className = '', children, ...props },
-    ref,
-  ) {
-    return (
-      <button
-        ref={ref}
-        className={`rounded-xl font-medium transition-colors disabled:opacity-50 ${variants[variant]} ${sizes[size]} ${className}`}
-        {...props}
-      >
-        {children}
-      </button>
-    );
+function variantStyle(variant: Variant): CSSProperties {
+  switch (variant) {
+    case 'primary':
+      return {
+        backgroundColor: 'var(--accent)',
+        color: 'var(--accent-fg)',
+        border: '1px solid transparent',
+      };
+    case 'secondary':
+      return {
+        backgroundColor: 'var(--bg-card)',
+        color: 'var(--fg-default)',
+        border: '1px solid var(--border-default)',
+      };
+    case 'ghost':
+      return {
+        backgroundColor: 'transparent',
+        color: 'var(--accent)',
+        border: '1px solid transparent',
+      };
+    case 'danger':
+      return {
+        backgroundColor: 'var(--danger)',
+        color: '#ffffff',
+        border: '1px solid transparent',
+      };
+  }
+}
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    variant = 'primary',
+    size = 'md',
+    fullWidth,
+    isLoading,
+    leadingIcon,
+    trailingIcon,
+    className = '',
+    children,
+    disabled,
+    onClick,
+    haptic,
+    ...props
   },
-);
+  ref,
+) {
+  const effectiveHaptic =
+    haptic ??
+    (variant === 'primary'
+      ? 'tap'
+      : variant === 'danger'
+        ? 'warning'
+        : 'none');
+
+  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
+    if (effectiveHaptic !== 'none') {
+      void haptics[effectiveHaptic]?.();
+    }
+    onClick?.(e);
+  };
+
+  return (
+    <button
+      ref={ref}
+      disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
+      className={[
+        'press rounded-xl font-semibold inline-flex items-center justify-center gap-2',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        sizeClass[size],
+        fullWidth ? 'w-full' : '',
+        className,
+      ].filter(Boolean).join(' ')}
+      style={{
+        ...variantStyle(variant),
+        minHeight: sizeMinHeight[size],
+      }}
+      onClick={handleClick}
+      {...props}
+    >
+      {isLoading ? (
+        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+      ) : (
+        leadingIcon
+      )}
+      <span>{children}</span>
+      {!isLoading && trailingIcon}
+    </button>
+  );
+});
