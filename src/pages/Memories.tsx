@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, parse, differenceInDays } from 'date-fns';
+import { format, parse, differenceInDays, addDays } from 'date-fns';
 import { nanoid } from 'nanoid';
 import {
   Camera, Clock, MapPin, Star, Filter, Image, FileText,
@@ -15,6 +15,7 @@ import type { EventPhoto, CruiseEvent, MoodRating } from '@/types';
 import { formatTimeRange } from '@/utils/time';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { updateEvent } from '@/hooks/useEvents';
 import { ExportPDF } from '@/components/memories/ExportPDF';
 import { MapView } from '@/components/memories/MapView';
@@ -38,6 +39,8 @@ export function Memories() {
   const [qmMood, setQmMood] = useState<MoodRating>(null);
   const [qmPhotos, setQmPhotos] = useState<EventPhoto[]>([]);
   const qmFileRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showEmptyDays, setShowEmptyDays] = useState(false);
 
   // Trip stats
   const stats = useMemo(() => {
@@ -57,29 +60,52 @@ export function Memories() {
     return filtered;
   }, [events, filterMemberId]);
 
-  // Group events with content by date
+  // Group events by date. When showEmptyDays is true, include every cruise day
+  // even if it has no events or no content yet.
   const memoryDays = useMemo(() => {
-    const withContent = filteredEvents.filter(
-      (e) => (e.photos && e.photos.length > 0) || e.notes || e.isFavorite || e.mood,
-    );
-
     const byDate = new Map<string, CruiseEvent[]>();
-    for (const e of withContent) {
+    for (const e of filteredEvents) {
       const existing = byDate.get(e.date) ?? [];
       existing.push(e);
       byDate.set(e.date, existing);
     }
 
-    return Array.from(byDate.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, dayEvents]) => {
-        const sorted = dayEvents.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    // Build the list of dates to render
+    const dates: string[] = [];
+    if (showEmptyDays && cruise?.startDate && cruise?.endDate) {
+      // Every day of the cruise
+      const start = parse(cruise.startDate, 'yyyy-MM-dd', new Date());
+      const end = parse(cruise.endDate, 'yyyy-MM-dd', new Date());
+      const totalDays = differenceInDays(end, start) + 1;
+      for (let i = 0; i < totalDays; i++) {
+        dates.push(format(addDays(start, i), 'yyyy-MM-dd'));
+      }
+    } else {
+      // Only days that have at least one event with content
+      const datesWithContent = new Set<string>();
+      for (const [date, dayEvents] of byDate.entries()) {
+        const hasContent = dayEvents.some(
+          (e) => (e.photos && e.photos.length > 0) || e.notes || e.isFavorite || e.mood,
+        );
+        if (hasContent) datesWithContent.add(date);
+      }
+      dates.push(...Array.from(datesWithContent).sort());
+    }
+
+    return dates
+      .sort()
+      .map((date) => {
+        const dayEvents = byDate.get(date) ?? [];
+        const sorted = [...dayEvents].sort((a, b) => a.startTime.localeCompare(b.startTime));
         const dayPhotos = sorted.flatMap((e) => e.photos ?? []);
         const dayNum = cruise?.startDate
           ? differenceInDays(parse(date, 'yyyy-MM-dd', new Date()), parse(cruise.startDate, 'yyyy-MM-dd', new Date())) + 1
           : null;
         const hasExcursion = sorted.some((e) => e.category === 'excursion');
         const isSeaDay = !hasExcursion;
+        const hasContent = sorted.some(
+          (e) => (e.photos && e.photos.length > 0) || e.notes || e.isFavorite || e.mood,
+        );
 
         return {
           date,
@@ -89,9 +115,10 @@ export function Memories() {
           events: sorted,
           photoCount: dayPhotos.length,
           coverPhoto: cruise?.coverPhotos?.[date] ?? dayPhotos[0]?.dataUrl ?? null,
+          hasContent,
         };
       });
-  }, [filteredEvents, cruise]);
+  }, [filteredEvents, cruise, showEmptyDays]);
 
   const handleSetCoverPhoto = async (date: string, dataUrl: string) => {
     if (!activeCruiseId || !cruise) return;
@@ -124,12 +151,17 @@ export function Memories() {
 
   const handleQmAddPhotos = async (files: FileList | null) => {
     if (!files) return;
-    const newPhotos: EventPhoto[] = [];
-    for (const file of Array.from(files)) {
-      const dataUrl = await compressPhoto(file);
-      newPhotos.push({ id: nanoid(), dataUrl, caption: '', addedAt: Date.now() });
+    setIsUploading(true);
+    try {
+      const newPhotos: EventPhoto[] = [];
+      for (const file of Array.from(files)) {
+        const dataUrl = await compressPhoto(file);
+        newPhotos.push({ id: nanoid(), dataUrl, caption: '', addedAt: Date.now() });
+      }
+      setQmPhotos((prev) => [...prev, ...newPhotos]);
+    } finally {
+      setIsUploading(false);
     }
-    setQmPhotos((prev) => [...prev, ...newPhotos]);
   };
 
   const handleCreateQuickMemory = async () => {
@@ -212,28 +244,41 @@ export function Memories() {
           </div>
         </div>
 
-        {/* Member filter */}
-        {showFilters && members.length > 0 && (
-          <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
-            <button
-              onClick={() => setFilterMemberId(null)}
-              className={`text-xs px-3 py-1.5 rounded-full border whitespace-nowrap ${
-                !filterMemberId ? 'bg-ocean-500 text-white border-ocean-500' : 'border-cruise-border text-cruise-muted'
-              }`}
-            >
-              All
-            </button>
-            {members.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setFilterMemberId(filterMemberId === m.id ? null : m.id)}
-                className={`text-xs px-3 py-1.5 rounded-full border whitespace-nowrap flex items-center gap-1 ${
-                  filterMemberId === m.id ? 'bg-ocean-500 text-white border-ocean-500' : 'border-cruise-border text-cruise-muted'
-                }`}
-              >
-                <span>{m.emoji}</span> {m.name}
-              </button>
-            ))}
+        {/* Filters & toggles */}
+        {showFilters && (
+          <div className="flex flex-col gap-2 mt-2">
+            {members.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setFilterMemberId(null)}
+                  className={`text-xs px-3 py-1.5 rounded-full border whitespace-nowrap ${
+                    !filterMemberId ? 'bg-ocean-500 text-white border-ocean-500' : 'border-cruise-border text-cruise-muted'
+                  }`}
+                >
+                  All
+                </button>
+                {members.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setFilterMemberId(filterMemberId === m.id ? null : m.id)}
+                    className={`text-xs px-3 py-1.5 rounded-full border whitespace-nowrap flex items-center gap-1 ${
+                      filterMemberId === m.id ? 'bg-ocean-500 text-white border-ocean-500' : 'border-cruise-border text-cruise-muted'
+                    }`}
+                  >
+                    <span>{m.emoji}</span> {m.name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-xs text-cruise-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showEmptyDays}
+                onChange={(e) => setShowEmptyDays(e.target.checked)}
+                className="accent-ocean-500"
+              />
+              Show all cruise days (including empty ones)
+            </label>
           </div>
         )}
       </div>
@@ -317,6 +362,17 @@ export function Memories() {
 
               {/* Events for this day */}
               <div className="flex flex-col gap-4 p-4">
+                {dayEvents.length === 0 && (
+                  <button
+                    onClick={() => {
+                      useAppStore.getState().setSelectedDate(date);
+                      navigate('/event/new');
+                    }}
+                    className="w-full border-2 border-dashed border-cruise-border rounded-xl p-5 text-center text-cruise-muted/60 text-sm hover:border-ocean-500/50 hover:text-cruise-muted transition-colors"
+                  >
+                    Nothing planned yet — tap to add your first event for this day
+                  </button>
+                )}
                 {dayEvents.map((event) => {
                   const config = CATEGORY_CONFIG[event.category];
                   const assignedMembers = members.filter((m) =>
@@ -561,6 +617,7 @@ export function Memories() {
 
       {showExportPDF && <ExportPDF onClose={() => setShowExportPDF(false)} />}
       {showMapView && <MapView onClose={() => setShowMapView(false)} />}
+      {isUploading && <LoadingOverlay message="Compressing photos..." />}
     </div>
   );
 }

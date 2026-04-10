@@ -25,6 +25,7 @@ export function Onboarding() {
   const [shipName, setShipName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [dateError, setDateError] = useState('');
   const [members, setMembers] = useState<MemberDraft[]>([]);
   const [newName, setNewName] = useState('');
 
@@ -131,20 +132,37 @@ export function Onboarding() {
               label="Start date"
               type="date"
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                if (endDate && e.target.value >= endDate) {
+                  setDateError('End date must be after start date');
+                } else {
+                  setDateError('');
+                }
+              }}
             />
             <Input
               id="endDate"
               label="End date"
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                if (startDate && e.target.value <= startDate) {
+                  setDateError('End date must be after start date');
+                } else {
+                  setDateError('');
+                }
+              }}
             />
           </div>
+          {dateError && (
+            <p className="text-xs text-red-400 -mt-2" role="alert">{dateError}</p>
+          )}
           <Button
             onClick={() => setStep('members')}
             className="mt-2"
-            disabled={!startDate || !endDate}
+            disabled={!startDate || !endDate || !!dateError || endDate <= startDate}
           >
             Next: Add Family
           </Button>

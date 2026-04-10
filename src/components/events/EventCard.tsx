@@ -23,15 +23,27 @@ export function EventCard({ event, members, hasConflict, reminder }: EventCardPr
   );
   const photoCount = event.photos?.length ?? 0;
 
+  const ariaLabel = [
+    event.title,
+    formatTimeRange(event.startTime, event.endTime),
+    event.venue ? `at ${event.venue}` : '',
+    hasConflict ? '. Schedule conflict' : '',
+    active ? '. Happening now' : '',
+    past ? '. Completed' : '',
+  ].filter(Boolean).join(', ');
+
   return (
     <button
       onClick={() => navigate(`/event/${event.id}`)}
-      className={`w-full text-left rounded-2xl p-4 transition-colors active:scale-[0.98] ${
-        active
-          ? 'bg-ocean-500/15 border border-ocean-500/40'
-          : past
-            ? 'bg-cruise-card/50 border border-cruise-border/50 opacity-60'
-            : 'bg-cruise-card border border-cruise-border'
+      aria-label={ariaLabel}
+      className={`w-full text-left rounded-2xl p-4 transition-colors active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-ocean-500 focus-visible:ring-offset-2 focus-visible:ring-offset-cruise-bg ${
+        hasConflict
+          ? 'bg-amber-500/10 border-2 border-amber-500/60 shadow-[0_0_0_1px_rgba(251,191,36,0.2)]'
+          : active
+            ? 'bg-ocean-500/15 border border-ocean-500/40'
+            : past
+              ? 'bg-cruise-card/50 border border-cruise-border/50 opacity-60'
+              : 'bg-cruise-card border border-cruise-border'
       }`}
     >
       <div className="flex items-start gap-3">
@@ -85,6 +97,16 @@ export function EventCard({ event, members, hasConflict, reminder }: EventCardPr
               {assignedMembers.map((m) => (
                 <MemberChip key={m.id} member={m} />
               ))}
+            </div>
+          )}
+
+          {/* Conflict badge */}
+          {hasConflict && (
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full">
+                <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                Schedule conflict
+              </span>
             </div>
           )}
 

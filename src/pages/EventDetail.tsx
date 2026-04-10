@@ -23,6 +23,8 @@ import { MemberChip } from '@/components/family/MemberAvatar';
 import { Button } from '@/components/ui/Button';
 import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
 import { SocialShareMenu } from '@/components/ui/SocialShareMenu';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 
 function compressPhoto(file: File): Promise<string> {
   return new Promise((resolve) => {
@@ -59,10 +61,13 @@ export function EventDetail() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [lightboxIndex, setLightboxIndex] = useState(-1);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePhotoId, setDeletePhotoId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   if (!event) {
     return (
-      <div className="p-6 text-center text-cruise-muted">
+      <div className="p-6 text-center text-cruise-muted" role="status">
         Event not found
       </div>
     );
@@ -74,27 +79,57 @@ export function EventDetail() {
   );
   const photos = event.photos ?? [];
 
+  // Parse category-specific metadata from notes
+  const parseMetadata = (raw: string) => {
+    let base = raw;
+    let booking: { status: string; confirmation: string; cost: string } | null = null;
+    let dining: { partySize: string; dressCode: string; specialRequest: string } | null = null;
+    const bm = base.match(/\n?\[BOOKING:\s*([^\]]*)\]/);
+    if (bm) {
+      const parts = (bm[1] ?? '').split('|').map((s) => s.trim());
+      booking = { status: parts[0] ?? '', confirmation: parts[1] ?? '', cost: parts[2] ?? '' };
+      base = base.replace(bm[0], '').trim();
+    }
+    const dm = base.match(/\n?\[DINING:\s*([^\]]*)\]/);
+    if (dm) {
+      const parts = (dm[1] ?? '').split('|').map((s) => s.trim());
+      dining = { partySize: parts[0] ?? '', dressCode: parts[1] ?? '', specialRequest: parts[2] ?? '' };
+      base = base.replace(dm[0], '').trim();
+    }
+    return { base, booking, dining };
+  };
+
+  const meta = parseMetadata(event.notes ?? '');
+  const hasBooking = meta.booking && (meta.booking.status || meta.booking.confirmation || meta.booking.cost);
+  const hasDining = meta.dining && (meta.dining.partySize || meta.dining.dressCode || meta.dining.specialRequest);
+
   const handleAddPhotos = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const newPhotos: EventPhoto[] = [];
-    for (const file of Array.from(files)) {
-      const dataUrl = await compressPhoto(file);
-      newPhotos.push({
-        id: nanoid(),
-        dataUrl,
-        caption: '',
-        addedAt: Date.now(),
+    setIsUploading(true);
+    try {
+      const newPhotos: EventPhoto[] = [];
+      for (const file of Array.from(files)) {
+        const dataUrl = await compressPhoto(file);
+        newPhotos.push({
+          id: nanoid(),
+          dataUrl,
+          caption: '',
+          addedAt: Date.now(),
+        });
+      }
+      await updateEvent(event.id, {
+        photos: [...photos, ...newPhotos],
       });
+    } finally {
+      setIsUploading(false);
     }
-    await updateEvent(event.id, {
-      photos: [...photos, ...newPhotos],
-    });
   };
 
   const handleDeletePhoto = async (photoId: string) => {
     await updateEvent(event.id, {
       photos: photos.filter((p) => p.id !== photoId),
     });
+    setDeletePhotoId(null);
   };
 
   const handleToggleFavorite = async () => {
@@ -116,19 +151,32 @@ export function EventDetail() {
     <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 pt-2 pb-2 border-b border-cruise-border">
-        <button onClick={() => navigate(-1)} className="text-cruise-muted p-1">
+        <button
+          onClick={() => navigate(-1)}
+          className="text-cruise-muted p-1"
+          aria-label="Go back"
+        >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-bold flex-1">Event Details</h1>
-        <button onClick={() => setShowShareMenu(true)} className="text-cruise-muted p-1">
+        <button
+          onClick={() => setShowShareMenu(true)}
+          className="text-cruise-muted p-1"
+          aria-label="Share event"
+        >
           <Share2 className="w-5 h-5" />
         </button>
-        <button onClick={handleToggleFavorite} className="p-1">
+        <button
+          onClick={handleToggleFavorite}
+          className="p-1"
+          aria-label={event.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
           <Star className={`w-5 h-5 ${event.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-cruise-muted'}`} />
         </button>
         <button
           onClick={() => navigate(`/event/${event.id}/edit`)}
           className="text-ocean-400 p-1"
+          aria-label="Edit event"
         >
           <Edit2 className="w-5 h-5" />
         </button>
@@ -140,6 +188,7 @@ export function EventDetail() {
           <span
             className="w-3 h-3 rounded-full"
             style={{ backgroundColor: config.color }}
+            aria-hidden="true"
           />
           <span className="text-sm font-medium" style={{ color: config.color }}>
             {config.label}
@@ -150,14 +199,14 @@ export function EventDetail() {
 
         {/* Time */}
         <div className="flex items-center gap-2 text-cruise-muted">
-          <Clock className="w-4 h-4" />
+          <Clock className="w-4 h-4" aria-hidden="true" />
           <span>{formatTimeRange(event.startTime, event.endTime)}</span>
         </div>
 
         {/* Venue */}
         {event.venue && (
           <div className="flex items-center gap-2 text-cruise-muted">
-            <MapPin className="w-4 h-4" />
+            <MapPin className="w-4 h-4" aria-hidden="true" />
             <span>
               {event.venue}
               {event.deck != null && ` · Deck ${event.deck}`}
@@ -168,11 +217,14 @@ export function EventDetail() {
         {/* Mood picker */}
         <div>
           <span className="text-sm text-cruise-muted block mb-2">How was it?</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2" role="radiogroup" aria-label="Rate this event">
             {MOOD_OPTIONS.map(({ emoji, label }) => (
               <button
                 key={emoji}
                 onClick={() => handleSetMood(emoji)}
+                role="radio"
+                aria-checked={event.mood === emoji}
+                aria-label={label}
                 className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border transition-colors ${
                   event.mood === emoji
                     ? 'bg-ocean-500/20 border-ocean-500'
@@ -200,13 +252,75 @@ export function EventDetail() {
           </div>
         )}
 
+        {/* Booking details */}
+        {hasBooking && meta.booking && (
+          <div>
+            <span className="text-sm text-cruise-muted block mb-1">Booking</span>
+            <div className="bg-cruise-card rounded-xl p-3 border border-cruise-border flex flex-col gap-1 text-sm">
+              {meta.booking.status && (
+                <div className="flex justify-between">
+                  <span className="text-cruise-muted">Status</span>
+                  <span className="text-cruise-text capitalize">{meta.booking.status}</span>
+                </div>
+              )}
+              {meta.booking.confirmation && (
+                <div className="flex justify-between">
+                  <span className="text-cruise-muted">Confirmation</span>
+                  <span className="text-cruise-text font-mono">{meta.booking.confirmation}</span>
+                </div>
+              )}
+              {meta.booking.cost && (
+                <div className="flex justify-between">
+                  <span className="text-cruise-muted">Cost</span>
+                  <span className="text-cruise-text">{meta.booking.cost}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Dining details */}
+        {hasDining && meta.dining && (
+          <div>
+            <span className="text-sm text-cruise-muted block mb-1">Dining</span>
+            <div className="bg-cruise-card rounded-xl p-3 border border-cruise-border flex flex-col gap-1 text-sm">
+              {meta.dining.partySize && (
+                <div className="flex justify-between">
+                  <span className="text-cruise-muted">Party size</span>
+                  <span className="text-cruise-text">{meta.dining.partySize}</span>
+                </div>
+              )}
+              {meta.dining.dressCode && (
+                <div className="flex justify-between">
+                  <span className="text-cruise-muted">Dress code</span>
+                  <span className="text-cruise-text capitalize">{meta.dining.dressCode.replace('-', ' ')}</span>
+                </div>
+              )}
+              {meta.dining.specialRequest && (
+                <div className="flex justify-between gap-2">
+                  <span className="text-cruise-muted shrink-0">Request</span>
+                  <span className="text-cruise-text text-right">{meta.dining.specialRequest}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Notes */}
-        {event.notes && (
+        {meta.base && (
           <div>
             <span className="text-sm text-cruise-muted block mb-1">Notes</span>
             <p className="text-cruise-text bg-cruise-card rounded-xl p-3 border border-cruise-border whitespace-pre-wrap">
-              {event.notes}
+              {meta.base}
             </p>
+          </div>
+        )}
+
+        {/* Reminder */}
+        {event.reminderMinutes != null && (
+          <div className="flex items-center gap-2 text-sm text-cruise-muted">
+            <span>⏰</span>
+            <span>Reminder {event.reminderMinutes} min before</span>
           </div>
         )}
 
@@ -219,6 +333,7 @@ export function EventDetail() {
             <button
               onClick={() => fileRef.current?.click()}
               className="flex items-center gap-1.5 text-xs text-ocean-400 bg-ocean-400/10 px-3 py-1.5 rounded-full"
+              aria-label="Add photo"
             >
               <Camera className="w-3.5 h-3.5" />
               Add Photo
@@ -230,29 +345,34 @@ export function EventDetail() {
               multiple
               className="hidden"
               onChange={(e) => handleAddPhotos(e.target.files)}
+              aria-label="Select photos to upload"
             />
           </div>
 
           {photos.length > 0 ? (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2" role="list" aria-label="Event photos">
               {photos.map((photo, photoIdx) => (
                 <div
                   key={photo.id}
-                  role="button"
+                  role="listitem"
                   onClick={() => setLightboxIndex(photoIdx)}
-                  className="relative aspect-square rounded-xl overflow-hidden bg-cruise-surface"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxIndex(photoIdx); }}}
+                  className="relative aspect-square rounded-xl overflow-hidden bg-cruise-surface cursor-pointer"
+                  aria-label={photo.caption || `Photo ${photoIdx + 1}`}
                 >
                   <img
                     src={photo.dataUrl}
-                    alt=""
+                    alt={photo.caption || ''}
                     className="w-full h-full object-cover"
                   />
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeletePhoto(photo.id);
+                      setDeletePhotoId(photo.id);
                     }}
                     className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                    aria-label="Delete photo"
                   >
                     <X className="w-3.5 h-3.5 text-white" />
                   </button>
@@ -271,9 +391,9 @@ export function EventDetail() {
 
         {/* Conflicts */}
         {conflicts.length > 0 && (
-          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl" role="alert">
             <div className="flex items-center gap-2 mb-1">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              <AlertTriangle className="w-4 h-4 text-amber-400" aria-hidden="true" />
               <span className="text-sm font-medium text-amber-300">
                 Schedule Conflict
               </span>
@@ -295,13 +415,43 @@ export function EventDetail() {
         )}
 
         {/* Delete button */}
-        <Button variant="danger" onClick={handleDelete} className="mt-4">
+        <Button
+          variant="danger"
+          onClick={() => setShowDeleteConfirm(true)}
+          className="mt-4"
+          aria-label="Delete event"
+        >
           <span className="flex items-center justify-center gap-2">
             <Trash2 className="w-4 h-4" />
             Delete Event
           </span>
         </Button>
       </div>
+
+      {/* Photo upload loading overlay */}
+      {isUploading && <LoadingOverlay message="Compressing photos..." />}
+
+      {/* Delete event confirmation */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete Event"
+          message={`Are you sure you want to delete "${event.title}"? This action cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {/* Delete photo confirmation */}
+      {deletePhotoId && (
+        <ConfirmDialog
+          title="Delete Photo"
+          message="Are you sure you want to remove this photo? This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => handleDeletePhoto(deletePhotoId)}
+          onCancel={() => setDeletePhotoId(null)}
+        />
+      )}
 
       {lightboxIndex >= 0 && (
         <PhotoLightbox
