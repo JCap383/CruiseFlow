@@ -6,6 +6,7 @@ import { useCruises } from '@/hooks/useCruise';
 import { useAppStore } from '@/stores/appStore';
 import { platform } from '@/platform';
 import { MigrationScreen } from '@/components/MigrationScreen';
+import { useEventNotifications } from '@/hooks/useEventNotifications';
 
 export function App() {
   const cruises = useCruises(); // undefined while loading, Cruise[] once resolved
@@ -23,6 +24,9 @@ export function App() {
   useEffect(() => {
     seedVenues();
   }, []);
+
+  // Fire browser notifications for upcoming events with reminders set
+  useEventNotifications();
 
   // Auto-select cruise or redirect to onboarding
   useEffect(() => {
