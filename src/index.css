@@ -152,8 +152,14 @@
 
 html, body {
   height: 100%;
+  /* iOS Safari: use dynamic viewport height so the shell resizes as the
+   * browser chrome (top address bar / bottom toolbar) slides in and out.
+   * Falls back to 100% on browsers that don't support dvh. */
+  height: 100dvh;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 html {
@@ -163,9 +169,12 @@ html {
 
 #root {
   height: 100%;
+  height: 100dvh;
   padding-top: env(safe-area-inset-top);
   background-color: var(--bg-default);
   color: var(--fg-default);
+  display: flex;
+  flex-direction: column;
 }
 
 body {
