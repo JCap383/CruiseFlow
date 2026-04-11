@@ -285,6 +285,18 @@ select:focus {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* #96: Ken Burns pan+zoom used by the cruise recap player on photo cards.
+   Subtle (1.00 → 1.10) so faces don't drift off the edge. */
+@keyframes kenburns {
+  from { transform: scale(1.00) translate(0, 0); }
+  to   { transform: scale(1.10) translate(-2%, -2%); }
+}
+
+@keyframes recap-card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .animate-slide-up      { animation: slide-up var(--dur-base) var(--ease-emphasized); }
 .animate-scale-in      { animation: scale-in var(--dur-fast) var(--ease-spring); }
 .animate-fade-in       { animation: fade-in var(--dur-base) var(--ease-standard); }

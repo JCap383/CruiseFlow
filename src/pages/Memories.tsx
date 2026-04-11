@@ -586,6 +586,51 @@ export function Memories() {
         </div>
       )}
 
+      {/* #96: "Play your story" CTA — shown when a specific cruise is
+          selected and it has at least a few events worth replaying. We
+          gate on `stats.events >= 3` so 1-event cruises don't get a
+          shiny button that leads to an empty recap. */}
+      {!isAllCruises && cruise && stats.events >= 3 && (
+        <button
+          type="button"
+          onClick={() => {
+            void haptics.tap();
+            navigate(`/cruise/${cruise.id}/recap`);
+          }}
+          className="mx-4 mt-4 w-[calc(100%-32px)] press flex items-center gap-3 rounded-2xl px-4 py-3"
+          style={{
+            background:
+              'linear-gradient(135deg, #ff8c42 0%, #e0477a 50%, #8b5cf6 100%)',
+            color: '#fff',
+            boxShadow: '0 10px 30px rgba(224, 71, 122, 0.25)',
+          }}
+          aria-label={`Play the story for ${cruise.name}`}
+        >
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+            style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}
+          >
+            <Play className="w-5 h-5" style={{ fill: '#fff' }} />
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <div className="text-callout font-bold">Play your story</div>
+            <div className="text-footnote opacity-85 truncate">
+              Relive {cruise.name} in {Math.min(9, stats.events >= 5 ? 9 : 6)}{' '}
+              cards
+            </div>
+          </div>
+          <div
+            className="text-footnote font-semibold px-2 py-1 rounded-full shrink-0"
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.35)',
+            }}
+          >
+            ▶
+          </div>
+        </button>
+      )}
+
       {/* Cruise filter — shown whenever there's more than one cruise */}
       {allCruises.length > 1 && (
         <div className="mt-5">

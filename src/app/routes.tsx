@@ -10,6 +10,7 @@ import { Onboarding } from '@/pages/Onboarding';
 import { Concierge } from '@/pages/Concierge';
 import { Memories } from '@/pages/Memories';
 import { ShipInfo } from '@/pages/ShipInfo';
+import { CruiseRecap } from '@/pages/CruiseRecap';
 
 const routes = [
   {
@@ -19,6 +20,12 @@ const routes = [
   {
     path: '/concierge',
     element: <Concierge />,
+  },
+  {
+    // #96: Full-screen story player — intentionally outside the AppShell
+    // so the bottom nav bar doesn't poke into the immersive experience.
+    path: '/cruise/:id/recap',
+    element: <CruiseRecap />,
   },
   {
     element: <AppShell />,

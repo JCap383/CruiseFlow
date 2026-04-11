@@ -24,6 +24,7 @@ import type { EventPhoto, EventCategory } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
 import { OnThisDay } from '@/components/memories/OnThisDay';
 import { DailyBulletinCard } from '@/components/memories/DailyBulletinCard';
+import { RecapPromoBanner } from '@/components/recap/RecapPromoBanner';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -379,6 +380,11 @@ export function DailySchedule() {
           </div>
         )}
       </div>
+
+      {/* #96: End-of-cruise recap promo. Self-gates on the cruise's
+          endDate + dismissal state, so it renders nothing outside the
+          promotion window. */}
+      <RecapPromoBanner cruise={cruise} />
 
       {/* #95: Daily bulletin card (ship's printed schedule photo). Always
           rendered when there's an active cruise so the empty-state camera
