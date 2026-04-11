@@ -156,6 +156,11 @@ export function StoryViewer({
     holdTimer: number | null;
     moved: boolean;
   } | null>(null);
+  // Timestamp of the most recent touchend. On touch devices a tap fires both
+  // `touchend` and a synthetic `click`, so the onClick handler below guards
+  // against any click that arrives within a short window after a touch —
+  // otherwise every tap advances the story twice (issue #57).
+  const lastTouchEndAt = useRef(0);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -210,14 +215,16 @@ export function StoryViewer({
 
     if (!ref.moved) {
       const t = e.changedTouches[0];
-      if (!t) return;
-      const el = e.currentTarget as HTMLElement;
-      const rect = el.getBoundingClientRect();
-      const relX = t.clientX - rect.left;
-      if (relX < rect.width * 0.33) goPrev();
-      else goNext();
+      if (t) {
+        const el = e.currentTarget as HTMLElement;
+        const rect = el.getBoundingClientRect();
+        const relX = t.clientX - rect.left;
+        if (relX < rect.width * 0.33) goPrev();
+        else goNext();
+      }
     }
 
+    lastTouchEndAt.current = Date.now();
     touchRef.current = null;
   };
 
@@ -246,7 +253,11 @@ export function StoryViewer({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={(e) => {
-          if (touchRef.current) return; // touch already handled
+          // Ignore clicks while a touch is still in flight, and also the
+          // synthetic click that fires right after a touchend on mobile —
+          // otherwise taps advance the story twice (issue #57).
+          if (touchRef.current) return;
+          if (Date.now() - lastTouchEndAt.current < 500) return;
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
           const relX = e.clientX - rect.left;
           if (relX < rect.width * 0.33) goPrev();
