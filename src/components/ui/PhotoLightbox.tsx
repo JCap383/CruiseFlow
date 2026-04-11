@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X, Pencil, Check, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Pencil, Check, Download, Star } from 'lucide-react';
 import type { EventPhoto } from '@/types';
 
 interface PhotoLightboxProps {
@@ -7,9 +7,30 @@ interface PhotoLightboxProps {
   initialIndex: number;
   onClose: () => void;
   onUpdateCaption?: (photoId: string, caption: string) => void;
+  /**
+   * #94: optional "set as cover" action. When provided, the lightbox shows
+   * a star button in the top toolbar that promotes the currently visible
+   * photo to be the day's cover. The host page is responsible for knowing
+   * *which* day/cruise the photo belongs to and writing the change.
+   */
+  onSetCover?: (photoId: string) => void;
+  /**
+   * #94: data URL of the photo that is currently the cover for the day
+   * these photos belong to. When the visible photo matches this, the star
+   * renders filled and the toolbar shows a "Cover" status label instead of
+   * the action.
+   */
+  currentCoverDataUrl?: string;
 }
 
-export function PhotoLightbox({ photos, initialIndex, onClose, onUpdateCaption }: PhotoLightboxProps) {
+export function PhotoLightbox({
+  photos,
+  initialIndex,
+  onClose,
+  onUpdateCaption,
+  onSetCover,
+  currentCoverDataUrl,
+}: PhotoLightboxProps) {
   const [index, setIndex] = useState(initialIndex);
   const [editingCaption, setEditingCaption] = useState(false);
   const [captionText, setCaptionText] = useState('');
@@ -117,6 +138,10 @@ export function PhotoLightbox({ photos, initialIndex, onClose, onUpdateCaption }
 
   if (!photo) return null;
 
+  // #94: derive whether the visible photo IS the day's current cover so the
+  // toolbar can switch between an action button and a status badge.
+  const isCoverPhoto = !!currentCoverDataUrl && currentCoverDataUrl === photo.dataUrl;
+
   return (
     <div
       ref={backdropRef}
@@ -125,15 +150,41 @@ export function PhotoLightbox({ photos, initialIndex, onClose, onUpdateCaption }
     >
       {/* Top buttons */}
       <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 z-10 flex items-center gap-2">
+        {onSetCover && (
+          // #94: surface "Set as cover" inside the full-screen viewer so the
+          // photo grid can stay clean. When this photo is *already* the
+          // cover, render a filled star with no-op handler so it reads as a
+          // status indicator instead of a tappable action.
+          isCoverPhoto ? (
+            <span
+              className="h-10 px-3 flex items-center gap-1.5 rounded-full bg-white/20 text-white text-xs font-medium"
+              aria-label="This photo is the day's cover"
+            >
+              <Star className="w-4 h-4" style={{ fill: 'currentColor' }} aria-hidden="true" />
+              Cover
+            </span>
+          ) : (
+            <button
+              onClick={() => onSetCover(photo.id)}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition-colors"
+              aria-label="Set as cover photo"
+              title="Set as cover photo"
+            >
+              <Star className="w-5 h-5" aria-hidden="true" />
+            </button>
+          )
+        )}
         <button
           onClick={handleDownload}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition-colors"
+          aria-label="Download photo"
         >
           <Download className="w-5 h-5" />
         </button>
         <button
           onClick={onClose}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition-colors"
+          aria-label="Close photo viewer"
         >
           <X className="w-6 h-6" />
         </button>

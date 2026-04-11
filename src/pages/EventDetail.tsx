@@ -16,7 +16,9 @@ import {
 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useEvent, useEventsForDay, updateEvent, deleteEvent } from '@/hooks/useEvents';
+import { useCruise, updateCruise } from '@/hooks/useCruise';
 import { useFamily } from '@/hooks/useFamily';
+import { useToast } from '@/components/ui/Toast';
 import { useEventConflicts } from '@/hooks/useConflicts';
 import { CATEGORY_CONFIG, MOOD_OPTIONS } from '@/types';
 import type { EventPhoto, MoodRating } from '@/types';
@@ -61,6 +63,10 @@ export function EventDetail() {
   const members = useFamily();
   const dayEvents = useEventsForDay(event?.date);
   const conflicts = useEventConflicts(id ?? '', dayEvents);
+  // #94: pull the parent cruise so we know the current per-day cover and
+  // can write the user's pick from inside the lightbox.
+  const cruise = useCruise(event?.cruiseId ?? null);
+  const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [lightboxIndex, setLightboxIndex] = useState(-1);
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -625,6 +631,25 @@ export function EventDetail() {
               ),
             });
           }}
+          // #94: let users promote any photo to the day's cover from the
+          // full-screen viewer. Writes back to the cruise's per-date
+          // coverPhotos map and shows a toast confirmation.
+          currentCoverDataUrl={cruise?.coverPhotos?.[event.date]}
+          onSetCover={
+            cruise
+              ? async (photoId) => {
+                  const target = photos.find((p) => p.id === photoId);
+                  if (!target) return;
+                  await updateCruise(cruise.id, {
+                    coverPhotos: {
+                      ...(cruise.coverPhotos ?? {}),
+                      [event.date]: target.dataUrl,
+                    },
+                  });
+                  toast.success('Cover photo updated');
+                }
+              : undefined
+          }
         />
       )}
 

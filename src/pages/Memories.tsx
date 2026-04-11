@@ -86,6 +86,10 @@ export function Memories() {
 
   const [lightboxPhotos, setLightboxPhotos] = useState<EventPhoto[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(-1);
+  // #94: track the event the lightbox was opened from so we know which
+  // (cruiseId, date) bucket to write to when the user picks a cover photo
+  // from inside the full-screen viewer.
+  const [lightboxEvent, setLightboxEvent] = useState<CruiseEvent | null>(null);
   const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showExportPDF, setShowExportPDF] = useState(false);
@@ -399,7 +403,15 @@ export function Memories() {
   // explicit cover photo, then the earliest day with any photo within that
   // cruise (using a date-ascending lookup so the result is independent of
   // the visible sortOrder).
-  const firstCover = useMemo(() => {
+  // #94: also return which day the cover came from so the hero can render
+  // a discoverable "Day N cover" pill — the cover feature was effectively
+  // invisible before because nothing told the user the hero was their pick.
+  const heroCover = useMemo<{
+    src: string;
+    dayNum: number | null;
+    dayType: 'port' | null;
+    cruiseId: string;
+  } | null>(() => {
     if (memoryDays.length === 0) return null;
     const stable = [...memoryDays].sort((a, b) => {
       const cA = cruiseById.get(a.cruiseId);
@@ -408,8 +420,16 @@ export function Memories() {
       if (createdDiff !== 0) return createdDiff;
       return a.date.localeCompare(b.date);
     });
-    return stable.find((d) => d.coverPhoto)?.coverPhoto ?? null;
+    const hit = stable.find((d) => d.coverPhoto);
+    if (!hit || !hit.coverPhoto) return null;
+    return {
+      src: hit.coverPhoto,
+      dayNum: hit.dayNum,
+      dayType: hit.dayType,
+      cruiseId: hit.cruiseId,
+    };
   }, [memoryDays, cruiseById]);
+  const firstCover = heroCover?.src ?? null;
   const heroParallax = Math.max(-80, -scrollY * 0.4);
   const heroFade = Math.max(0, 1 - scrollY / 200);
 
@@ -514,6 +534,30 @@ export function Memories() {
           <Text variant="largeTitle" weight="bold" className="text-white">
             {isAllCruises ? 'All Memories' : (cruise?.name ?? 'Memories')}
           </Text>
+          {heroCover && heroCover.dayNum && (
+            // #94: surface the connection between the user's chosen cover
+            // and the hero banner. Without this, the cover feature looked
+            // broken because nothing tied the picked photo to the hero.
+            <div className="mt-2 flex items-center">
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-caption"
+                style={{
+                  backgroundColor: 'rgba(0,0,0,0.45)',
+                  color: '#ffffff',
+                  backdropFilter: 'blur(4px)',
+                }}
+                aria-label={`Cover photo from day ${heroCover.dayNum}`}
+              >
+                <Star
+                  className="w-3 h-3"
+                  style={{ fill: 'currentColor' }}
+                  aria-hidden="true"
+                />
+                Day {heroCover.dayNum} cover
+                {heroCover.dayType === 'port' ? ' · Port' : ''}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -788,25 +832,48 @@ export function Memories() {
         />
       ) : (
         <div className="flex flex-col">
-          {memoryDays.map(({ key, date, label, dayNum, dayType, events: dayEvents, photoCount, cruiseName, cruiseId: bucketCruiseId }) => (
+          {memoryDays.map(({ key, date, label, dayNum, dayType, events: dayEvents, photoCount, cruiseName, coverPhoto }) => (
             <div key={key} className="mt-6">
               {/* Day header */}
               <div className="px-4 flex items-center justify-between mb-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {dayNum && (
-                      <Badge tone={dayType === 'port' ? 'accent' : 'neutral'} size="md">
-                        Day {dayNum}
-                        {dayType === 'port' ? ' · Port Day' : ''}
-                      </Badge>
-                    )}
-                    {isAllCruises && (
-                      <Badge tone="neutral" size="md" icon={<Ship className="w-3 h-3" />}>
-                        {cruiseName}
-                      </Badge>
-                    )}
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* #94: per-day cover thumbnail. Surfaces the cover so the
+                      feature is discoverable beyond the page hero. Uses an
+                      explicit user pick first, then falls back to the day's
+                      first photo so users can see what would *become* the
+                      cover if they don't pick one. */}
+                  {coverPhoto && (
+                    <div
+                      className="w-10 h-10 rounded-full overflow-hidden shrink-0"
+                      style={{
+                        border: '2px solid var(--accent)',
+                        boxShadow: '0 0 0 1px var(--bg-default)',
+                      }}
+                      aria-hidden="true"
+                    >
+                      <img
+                        src={coverPhoto}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {dayNum && (
+                        <Badge tone={dayType === 'port' ? 'accent' : 'neutral'} size="md">
+                          Day {dayNum}
+                          {dayType === 'port' ? ' · Port Day' : ''}
+                        </Badge>
+                      )}
+                      {isAllCruises && (
+                        <Badge tone="neutral" size="md" icon={<Ship className="w-3 h-3" />}>
+                          {cruiseName}
+                        </Badge>
+                      )}
+                    </div>
+                    <Text variant="headline" className="mt-1.5">{label}</Text>
                   </div>
-                  <Text variant="headline" className="mt-1.5">{label}</Text>
                 </div>
                 <div className="flex items-center gap-2">
                   {photoCount > 0 && (
@@ -928,26 +995,21 @@ export function Memories() {
 
                         {photos.length > 0 && (
                           <div className="grid grid-cols-3 gap-1.5 mt-2">
-                            {photos.map((photo, photoIdx) => {
-                              // #93: only the *current* cover photo for this
-                              // day should advertise itself as "Cover". The
-                              // previous markup labelled every photo "Cover"
-                              // because the chip was an action label, not a
-                              // status — confusing because it looked like an
-                              // assertion that every photo was the cover.
-                              // Now: the active cover renders a filled-star
-                              // "Cover" badge and other photos render a
-                              // smaller outlined "Set cover" button.
-                              const bucketCruise = cruiseById.get(bucketCruiseId);
-                              const dayCover = bucketCruise?.coverPhotos?.[event.date];
-                              const isCover = dayCover === photo.dataUrl;
-                              return (
+                            {photos.map((photo, photoIdx) => (
+                              // #94: the per-photo "Set cover / Cover" chip
+                              // is gone. The grid is now pure thumbnails so
+                              // it doesn't repeat the same action label N
+                              // times. The cover action lives inside the
+                              // full-screen lightbox (PhotoLightbox) so it
+                              // only shows up once, on the photo the user
+                              // is actually looking at.
                               <div key={photo.id} className="relative">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setLightboxPhotos(photos);
                                     setLightboxIndex(photoIdx);
+                                    setLightboxEvent(event);
                                   }}
                                   className="aspect-square w-full rounded-xl overflow-hidden press block"
                                   style={{ backgroundColor: 'var(--bg-surface)' }}
@@ -959,51 +1021,13 @@ export function Memories() {
                                     className="w-full h-full object-cover"
                                   />
                                 </button>
-                                {isCover ? (
-                                  <div
-                                    className="absolute bottom-1 left-1 text-caption px-1.5 py-0.5 rounded flex items-center gap-1 pointer-events-none"
-                                    style={{
-                                      backgroundColor: 'var(--accent)',
-                                      color: 'var(--accent-fg)',
-                                    }}
-                                    aria-label="This photo is the day's cover"
-                                  >
-                                    <Star
-                                      className="w-3 h-3"
-                                      style={{ fill: 'currentColor' }}
-                                      aria-hidden="true"
-                                    />
-                                    Cover
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleSetCoverPhoto(
-                                        bucketCruiseId,
-                                        event.date,
-                                        photo.dataUrl,
-                                      )
-                                    }
-                                    className="absolute bottom-1 left-1 text-caption px-1.5 py-0.5 rounded flex items-center gap-1 press"
-                                    style={{
-                                      backgroundColor: 'rgba(0,0,0,0.6)',
-                                      color: 'rgba(255,255,255,0.92)',
-                                    }}
-                                    aria-label="Set as cover photo"
-                                  >
-                                    <Star className="w-3 h-3" aria-hidden="true" />
-                                    Set cover
-                                  </button>
-                                )}
                                 {photo.caption && (
                                   <div className="absolute bottom-0 left-0 right-0 px-1.5 py-0.5 pointer-events-none" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                                     <p className="text-caption truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>{photo.caption}</p>
                                   </div>
                                 )}
                               </div>
-                            );
-                          })}
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1020,7 +1044,10 @@ export function Memories() {
         <PhotoLightbox
           photos={lightboxPhotos}
           initialIndex={lightboxIndex}
-          onClose={() => setLightboxIndex(-1)}
+          onClose={() => {
+            setLightboxIndex(-1);
+            setLightboxEvent(null);
+          }}
           onUpdateCaption={async (photoId, caption) => {
             for (const event of events) {
               const photos = event.photos ?? [];
@@ -1035,6 +1062,30 @@ export function Memories() {
               }
             }
           }}
+          // #94: when the lightbox knows which event/day the photos came
+          // from, expose the "set as cover" action and the current cover
+          // so the toolbar can render either the action button or the
+          // filled-star status badge.
+          currentCoverDataUrl={
+            lightboxEvent
+              ? cruiseById.get(lightboxEvent.cruiseId)?.coverPhotos?.[
+                  lightboxEvent.date
+                ]
+              : undefined
+          }
+          onSetCover={
+            lightboxEvent
+              ? (photoId) => {
+                  const target = lightboxPhotos.find((p) => p.id === photoId);
+                  if (!target) return;
+                  void handleSetCoverPhoto(
+                    lightboxEvent.cruiseId,
+                    lightboxEvent.date,
+                    target.dataUrl,
+                  );
+                }
+              : undefined
+          }
         />
       )}
 
