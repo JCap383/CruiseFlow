@@ -29,6 +29,18 @@ export function FamilyDashboard() {
     'EEEE, MMM d',
   );
 
+  // #87: copy must reflect *which day* the dashboard is showing — saying
+  // "today" while browsing a future shore day was just confusing.
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const isViewingToday = selectedDate === today;
+  const isViewingFuture = selectedDate > today;
+  const dayWord = isViewingToday
+    ? 'today'
+    : isViewingFuture
+      ? 'this day'
+      : 'this day';
+  const dayWordCap = isViewingToday ? 'Today' : 'This day';
+
   const memberStatus = useMemo(() => {
     return members.map((member) => {
       const myEvents = events
@@ -63,7 +75,7 @@ export function FamilyDashboard() {
           e.stopPropagation();
           navigate(`/event/${event.id}`);
         }}
-        className={`w-full flex items-start gap-2 text-left py-1.5 ${
+        className={`w-full flex items-start gap-2 text-left py-1.5 press ${
           isPastEvent ? 'opacity-50' : ''
         }`}
       >
@@ -73,10 +85,18 @@ export function FamilyDashboard() {
           aria-hidden="true"
         />
         <div className="flex-1 min-w-0">
-          <p className={`text-sm ${isPastEvent ? 'text-cruise-muted line-through' : 'text-cruise-text'} truncate`}>
+          <p
+            className={`text-sm truncate ${isPastEvent ? 'line-through' : ''}`}
+            style={{
+              color: isPastEvent ? 'var(--fg-muted)' : 'var(--fg-default)',
+            }}
+          >
             {event.title}
           </p>
-          <div className="flex items-center gap-2 text-xs text-cruise-muted">
+          <div
+            className="flex items-center gap-2 text-xs"
+            style={{ color: 'var(--fg-muted)' }}
+          >
             <span className="flex items-center gap-0.5">
               <Clock className="w-3 h-3" aria-hidden="true" />
               {formatTimeRange(event.startTime, event.endTime)}
@@ -96,25 +116,50 @@ export function FamilyDashboard() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="px-4 pt-2 pb-2 border-b border-cruise-border">
+      <div
+        className="px-4 pt-2 pb-2"
+        style={{ borderBottom: '1px solid var(--border-default)' }}
+      >
         <h1 className="text-lg font-bold">Family</h1>
-        <p className="text-sm text-cruise-muted mt-0.5">
+        <p
+          className="text-sm mt-0.5"
+          style={{ color: 'var(--fg-muted)' }}
+        >
           {dateLabel}
         </p>
       </div>
 
       {members.length === 0 ? (
         <div className="text-center py-16 px-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-ocean-500/10 mb-4">
-            <Users className="w-8 h-8 text-ocean-400" aria-hidden="true" />
+          <div
+            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
+            style={{ backgroundColor: 'var(--accent-soft)' }}
+          >
+            <Users
+              className="w-8 h-8"
+              style={{ color: 'var(--accent)' }}
+              aria-hidden="true"
+            />
           </div>
-          <p className="text-cruise-text font-semibold">No family members yet</p>
-          <p className="text-cruise-muted text-sm mt-1 max-w-xs mx-auto">
+          <p
+            className="font-semibold"
+            style={{ color: 'var(--fg-default)' }}
+          >
+            No family members yet
+          </p>
+          <p
+            className="text-sm mt-1 max-w-xs mx-auto"
+            style={{ color: 'var(--fg-muted)' }}
+          >
             Add members so you can see who&apos;s where and keep everyone on the same page.
           </p>
           <button
             onClick={() => navigate('/settings')}
-            className="mt-5 inline-flex items-center gap-1.5 bg-ocean-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium active:scale-95 transition-transform"
+            className="mt-5 inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-medium press"
+            style={{
+              backgroundColor: 'var(--accent)',
+              color: 'var(--accent-fg)',
+            }}
           >
             <Plus className="w-4 h-4" />
             Add family members
@@ -129,16 +174,26 @@ export function FamilyDashboard() {
             return (
               <div
                 key={member.id}
-                className="bg-cruise-card border border-cruise-border rounded-2xl p-4"
+                className="rounded-2xl p-4"
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1px solid var(--border-default)',
+                }}
               >
                 <div className="flex items-center gap-3 mb-3">
                   <MemberAvatar member={member} size="lg" />
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-cruise-text">
+                    <h3
+                      className="font-semibold"
+                      style={{ color: 'var(--fg-default)' }}
+                    >
                       {member.name}
                     </h3>
-                    <p className="text-xs text-cruise-muted">
-                      {totalEvents} event{totalEvents !== 1 ? 's' : ''} today
+                    <p
+                      className="text-xs"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
+                      {totalEvents} event{totalEvents !== 1 ? 's' : ''} {dayWord}
                       {member.isChild && ' · Child'}
                     </p>
                   </div>
@@ -146,14 +201,29 @@ export function FamilyDashboard() {
 
                 {/* Current activity */}
                 {current ? (
-                  <div className="bg-ocean-500/10 border border-ocean-500/20 rounded-xl p-3 mb-2">
-                    <span className="text-xs font-medium text-ocean-400">
+                  <div
+                    className="rounded-xl p-3 mb-2"
+                    style={{
+                      backgroundColor: 'var(--accent-soft)',
+                      border: '1px solid var(--accent)',
+                    }}
+                  >
+                    <span
+                      className="text-xs font-medium"
+                      style={{ color: 'var(--accent)' }}
+                    >
                       Now
                     </span>
-                    <p className="font-medium text-cruise-text mt-0.5">
+                    <p
+                      className="font-medium mt-0.5"
+                      style={{ color: 'var(--fg-default)' }}
+                    >
                       {current.title}
                     </p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-cruise-muted">
+                    <div
+                      className="flex items-center gap-3 mt-1 text-xs"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
                       {current.venue && (
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3" aria-hidden="true" />
@@ -167,24 +237,67 @@ export function FamilyDashboard() {
                     </div>
                   </div>
                 ) : totalEvents === 0 ? (
-                  <div className="bg-cruise-surface rounded-xl p-3 mb-2">
-                    <span className="text-xs text-cruise-muted">Nothing scheduled today</span>
+                  <div
+                    className="rounded-xl p-3 mb-2"
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                  >
+                    <span
+                      className="text-xs"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
+                      Nothing scheduled {dayWord}
+                    </span>
                   </div>
-                ) : upcoming.length === 0 ? (
-                  <div className="bg-cruise-surface rounded-xl p-3 mb-2">
-                    <span className="text-xs text-cruise-muted">All done for today</span>
+                ) : upcoming.length === 0 && isViewingToday ? (
+                  <div
+                    className="rounded-xl p-3 mb-2"
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                  >
+                    <span
+                      className="text-xs"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
+                      All done for today
+                    </span>
+                  </div>
+                ) : isViewingToday && upcoming.length > 0 ? (
+                  <div
+                    className="rounded-xl p-3 mb-2"
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                  >
+                    <span
+                      className="text-xs"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
+                      Free right now
+                    </span>
                   </div>
                 ) : (
-                  <div className="bg-cruise-surface rounded-xl p-3 mb-2">
-                    <span className="text-xs text-cruise-muted">Free right now</span>
+                  // Browsing a non-today day: avoid stale "now/free" copy.
+                  <div
+                    className="rounded-xl p-3 mb-2"
+                    style={{ backgroundColor: 'var(--bg-surface)' }}
+                  >
+                    <span
+                      className="text-xs"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
+                      {dayWordCap}&apos;s plan
+                    </span>
                   </div>
                 )}
 
                 {/* Upcoming list */}
                 {upcoming.length > 0 && (
-                  <div className="border-t border-cruise-border/50 pt-2">
-                    <span className="text-xs font-semibold text-cruise-muted uppercase tracking-wider">
-                      Up next
+                  <div
+                    className="pt-2"
+                    style={{ borderTop: '1px solid var(--border-default)' }}
+                  >
+                    <span
+                      className="text-xs font-semibold uppercase tracking-wider"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
+                      {isViewingToday ? 'Up next' : 'Planned'}
                     </span>
                     <div className="mt-1">
                       {visibleUpcoming.map((e) => renderEventRow(e))}
@@ -192,7 +305,8 @@ export function FamilyDashboard() {
                     {remainingUpcoming > 0 && (
                       <button
                         onClick={() => toggleExpanded(member.id)}
-                        className="mt-1 text-xs text-ocean-400 flex items-center gap-1"
+                        className="mt-1 text-xs flex items-center gap-1 press"
+                        style={{ color: 'var(--accent)' }}
                         aria-expanded={isExpanded}
                       >
                         <ChevronDown className="w-3 h-3" aria-hidden="true" />
@@ -202,7 +316,8 @@ export function FamilyDashboard() {
                     {isExpanded && upcoming.length > 2 && (
                       <button
                         onClick={() => toggleExpanded(member.id)}
-                        className="mt-1 text-xs text-ocean-400 flex items-center gap-1"
+                        className="mt-1 text-xs flex items-center gap-1 press"
+                        style={{ color: 'var(--accent)' }}
                         aria-expanded={isExpanded}
                       >
                         <ChevronUp className="w-3 h-3" aria-hidden="true" />
@@ -214,9 +329,15 @@ export function FamilyDashboard() {
 
                 {/* Past list (expanded only) */}
                 {isExpanded && past.length > 0 && (
-                  <div className="border-t border-cruise-border/50 mt-2 pt-2">
-                    <span className="text-xs font-semibold text-cruise-muted uppercase tracking-wider">
-                      Earlier today
+                  <div
+                    className="mt-2 pt-2"
+                    style={{ borderTop: '1px solid var(--border-default)' }}
+                  >
+                    <span
+                      className="text-xs font-semibold uppercase tracking-wider"
+                      style={{ color: 'var(--fg-muted)' }}
+                    >
+                      {isViewingToday ? 'Earlier today' : 'Earlier'}
                     </span>
                     <div className="mt-1">
                       {past.map((e) => renderEventRow(e, true))}
@@ -232,7 +353,12 @@ export function FamilyDashboard() {
       {/* FAB */}
       <button
         onClick={() => navigate('/event/new')}
-        className="fixed bottom-20 right-4 w-14 h-14 bg-ocean-500 text-white rounded-full shadow-lg shadow-ocean-500/30 flex items-center justify-center active:scale-95 transition-transform z-30"
+        className="fixed bottom-20 right-4 w-14 h-14 rounded-full flex items-center justify-center press z-30"
+        style={{
+          backgroundColor: 'var(--accent)',
+          color: 'var(--accent-fg)',
+          boxShadow: 'var(--shadow-fab)',
+        }}
         aria-label="Add new event"
       >
         <Plus className="w-6 h-6" />

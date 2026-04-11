@@ -225,8 +225,21 @@ export function Memories() {
             parse(bucketCruise.startDate, 'yyyy-MM-dd', new Date()),
           ) + 1
         : null;
+      // #80: Don't claim "Sea Day" just because the user didn't log an
+      // excursion — many port days have no excursion logged. Only emit a
+      // positive label when we have actual evidence:
+      //   - Excursion logged → Port Day
+      //   - Otherwise → no day-type badge (the trip dayNum still shows)
       const hasExcursion = sorted.some((e) => e.category === 'excursion');
-      const isSeaDay = !hasExcursion;
+      const dayType: 'port' | null = hasExcursion ? 'port' : null;
+
+      // #88: Pick the cover photo from a *stable* photo regardless of UI
+      // sort order. We pin the displayed cover to the user's explicit
+      // choice if any, otherwise to the earliest-captured photo of the day
+      // so toggling sort never swaps the visible cover.
+      const stablePhoto = dayPhotos
+        .slice()
+        .sort((a, b) => (a.addedAt ?? 0) - (b.addedAt ?? 0))[0];
 
       return {
         key: `${cruiseId}::${date}`,
@@ -235,11 +248,11 @@ export function Memories() {
         date,
         label: format(parse(date, 'yyyy-MM-dd', new Date()), 'EEEE, MMMM d'),
         dayNum,
-        isSeaDay,
+        dayType,
         events: sorted,
         photoCount: dayPhotos.length,
         coverPhoto:
-          bucketCruise?.coverPhotos?.[date] ?? dayPhotos[0]?.dataUrl ?? null,
+          bucketCruise?.coverPhotos?.[date] ?? stablePhoto?.dataUrl ?? null,
       };
     });
   }, [filteredEvents, cruise, showEmptyDays, cruiseById, isAllCruises, sortOrder]);
@@ -263,7 +276,10 @@ export function Memories() {
           date: day.date,
           label: day.label,
           dayNum: day.dayNum,
-          isSeaDay: day.isSeaDay,
+          // Stories still want a boolean. Treat the absence of a positive
+          // port-day signal as "sea day" for the storyteller, since the
+          // viewer just uses it for cosmetic copy.
+          isSeaDay: day.dayType !== 'port',
           photos,
         };
       })
@@ -276,10 +292,21 @@ export function Memories() {
     setStoryState({ dayIndex: 0, photoIndex: 0 });
   };
 
-  const handleSetCoverPhoto = async (date: string, dataUrl: string) => {
-    if (!activeCruiseId || !cruise) return;
-    await updateCruise(activeCruiseId, {
-      coverPhotos: { ...cruise.coverPhotos, [date]: dataUrl },
+  // #70: Use the event's *own* cruiseId, not the active cruise. When the
+  // user is viewing "All cruises", tapping "Cover" on a photo from cruise B
+  // while cruise A is active used to write the cover photo onto cruise A
+  // with cruise B's date as the key — corrupting cruise A and never giving
+  // cruise B its cover. Now we look up the right cruise and merge into its
+  // coverPhotos map.
+  const handleSetCoverPhoto = async (
+    eventCruiseId: string,
+    date: string,
+    dataUrl: string,
+  ) => {
+    const target = cruiseById.get(eventCruiseId);
+    if (!target) return;
+    await updateCruise(eventCruiseId, {
+      coverPhotos: { ...(target.coverPhotos ?? {}), [date]: dataUrl },
     });
     toast.success('Cover photo updated');
   };
@@ -367,8 +394,22 @@ export function Memories() {
     }
   };
 
-  // Hero data
-  const firstCover = memoryDays.find((d) => d.coverPhoto)?.coverPhoto ?? null;
+  // Hero data — #88: pin to a stable choice that doesn't change when the
+  // user toggles sort order. Always prefer the most recent cruise's
+  // explicit cover photo, then the earliest day with any photo within that
+  // cruise (using a date-ascending lookup so the result is independent of
+  // the visible sortOrder).
+  const firstCover = useMemo(() => {
+    if (memoryDays.length === 0) return null;
+    const stable = [...memoryDays].sort((a, b) => {
+      const cA = cruiseById.get(a.cruiseId);
+      const cB = cruiseById.get(b.cruiseId);
+      const createdDiff = (cB?.createdAt ?? 0) - (cA?.createdAt ?? 0);
+      if (createdDiff !== 0) return createdDiff;
+      return a.date.localeCompare(b.date);
+    });
+    return stable.find((d) => d.coverPhoto)?.coverPhoto ?? null;
+  }, [memoryDays, cruiseById]);
   const heroParallax = Math.max(-80, -scrollY * 0.4);
   const heroFade = Math.max(0, 1 - scrollY / 200);
 
@@ -747,15 +788,16 @@ export function Memories() {
         />
       ) : (
         <div className="flex flex-col">
-          {memoryDays.map(({ key, date, label, dayNum, isSeaDay, events: dayEvents, photoCount, cruiseName }) => (
+          {memoryDays.map(({ key, date, label, dayNum, dayType, events: dayEvents, photoCount, cruiseName, cruiseId: bucketCruiseId }) => (
             <div key={key} className="mt-6">
               {/* Day header */}
               <div className="px-4 flex items-center justify-between mb-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {dayNum && (
-                      <Badge tone={isSeaDay ? 'neutral' : 'accent'} size="md">
-                        Day {dayNum} · {isSeaDay ? 'Sea Day' : 'Port Day'}
+                      <Badge tone={dayType === 'port' ? 'accent' : 'neutral'} size="md">
+                        Day {dayNum}
+                        {dayType === 'port' ? ' · Port Day' : ''}
                       </Badge>
                     )}
                     {isAllCruises && (
@@ -801,30 +843,38 @@ export function Memories() {
                     event.memberIds.includes(m.id),
                   );
                   const photos = event.photos ?? [];
+                  const openEvent = () => {
+                    void haptics.tap();
+                    navigate(`/event/${event.id}`);
+                  };
+                  // #76: Replaced the old structure (outer <button> wrapping
+                  // <div role="button"> photos that themselves contained a
+                  // real <button> for "Cover") with a flat <div> shell. The
+                  // event card body and each photo are now sibling <button>
+                  // elements, so screen-reader and keyboard semantics are
+                  // sane and HTML's "no interactive descendants" rule is
+                  // respected.
                   return (
-                    <button
-                      key={event.id}
-                      type="button"
-                      onClick={() => {
-                        void haptics.tap();
-                        navigate(`/event/${event.id}`);
-                      }}
-                      className="w-full text-left press"
-                    >
-                      <div className="flex gap-3">
-                        {/* Timeline rail */}
-                        <div className="flex flex-col items-center pt-1.5">
-                          <div
-                            className="w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: 'var(--accent)' }}
-                          />
-                          <div
-                            className="w-0.5 flex-1 mt-1"
-                            style={{ backgroundColor: 'var(--border-default)' }}
-                          />
-                        </div>
+                    <div key={event.id} className="flex gap-3">
+                      {/* Timeline rail */}
+                      <div className="flex flex-col items-center pt-1.5">
+                        <div
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: 'var(--accent)' }}
+                        />
+                        <div
+                          className="w-0.5 flex-1 mt-1"
+                          style={{ backgroundColor: 'var(--border-default)' }}
+                        />
+                      </div>
 
-                        <div className="flex-1 min-w-0 pb-5">
+                      <div className="flex-1 min-w-0 pb-5">
+                        <button
+                          type="button"
+                          onClick={openEvent}
+                          className="w-full text-left press rounded-xl"
+                          aria-label={`Open ${event.title}`}
+                        >
                           <div className="flex items-center gap-1.5">
                             {event.isFavorite && (
                               <Star
@@ -853,78 +903,81 @@ export function Memories() {
                               </span>
                             )}
                           </div>
+                        </button>
 
-                          {assignedMembers.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {assignedMembers.map((m) => (
-                                <MemberChip key={m.id} member={m} />
-                              ))}
-                            </div>
-                          )}
+                        {assignedMembers.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {assignedMembers.map((m) => (
+                              <MemberChip key={m.id} member={m} />
+                            ))}
+                          </div>
+                        )}
 
-                          {event.notes && (
-                            <div
-                              className="text-subhead mt-2 rounded-xl p-3 whitespace-pre-wrap"
-                              style={{
-                                backgroundColor: 'var(--bg-card)',
-                                border: '1px solid var(--border-default)',
-                                color: 'var(--fg-default)',
-                              }}
-                            >
-                              {event.notes}
-                            </div>
-                          )}
+                        {event.notes && (
+                          <div
+                            className="text-subhead mt-2 rounded-xl p-3 whitespace-pre-wrap"
+                            style={{
+                              backgroundColor: 'var(--bg-card)',
+                              border: '1px solid var(--border-default)',
+                              color: 'var(--fg-default)',
+                            }}
+                          >
+                            {event.notes}
+                          </div>
+                        )}
 
-                          {photos.length > 0 && (
-                            <div className="grid grid-cols-3 gap-1.5 mt-2">
-                              {photos.map((photo, photoIdx) => (
-                                <div
-                                  key={photo.id}
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
+                        {photos.length > 0 && (
+                          <div className="grid grid-cols-3 gap-1.5 mt-2">
+                            {photos.map((photo, photoIdx) => (
+                              <div key={photo.id} className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => {
                                     setLightboxPhotos(photos);
                                     setLightboxIndex(photoIdx);
                                   }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setLightboxPhotos(photos);
-                                      setLightboxIndex(photoIdx);
-                                    }
-                                  }}
-                                  className="aspect-square rounded-xl overflow-hidden relative group press"
+                                  className="aspect-square w-full rounded-xl overflow-hidden press block"
                                   style={{ backgroundColor: 'var(--bg-surface)' }}
+                                  aria-label={photo.caption || `Open photo ${photoIdx + 1}`}
                                 >
                                   <img
                                     src={photo.dataUrl}
                                     alt={photo.caption || ''}
                                     className="w-full h-full object-cover"
                                   />
-                                  <button
-                                    type="button"
-                                    onClick={(ev) => {
-                                      ev.stopPropagation();
-                                      handleSetCoverPhoto(event.date, photo.dataUrl);
-                                    }}
-                                    className="absolute bottom-1 left-1 text-caption bg-black/60 text-white/90 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 group-focus:opacity-100"
-                                  >
-                                    Cover
-                                  </button>
-                                  {photo.caption && (
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-1.5 py-0.5">
-                                      <p className="text-caption text-white/90 truncate">{photo.caption}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                                </button>
+                                {/* #75: Cover button is always visible — the
+                                    old hover-only state was unreachable on
+                                    touch devices. */}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleSetCoverPhoto(
+                                      bucketCruiseId,
+                                      event.date,
+                                      photo.dataUrl,
+                                    )
+                                  }
+                                  className="absolute bottom-1 left-1 text-caption px-1.5 py-0.5 rounded press"
+                                  style={{
+                                    backgroundColor: 'rgba(0,0,0,0.6)',
+                                    color: 'rgba(255,255,255,0.92)',
+                                  }}
+                                  aria-label="Set as cover photo"
+                                >
+                                  Cover
+                                </button>
+                                {photo.caption && (
+                                  <div className="absolute bottom-0 left-0 right-0 px-1.5 py-0.5 pointer-events-none" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                                    <p className="text-caption truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>{photo.caption}</p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

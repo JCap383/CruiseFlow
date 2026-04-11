@@ -6,6 +6,7 @@ import { useCruises } from '@/hooks/useCruise';
 import { useAppStore } from '@/stores/appStore';
 import { platform } from '@/platform';
 import { MigrationScreen } from '@/components/MigrationScreen';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useEventNotifications } from '@/hooks/useEventNotifications';
 import { useThemeController } from '@/hooks/useThemeController';
 import { useNativeAppPolish } from '@/hooks/useNativeAppPolish';
@@ -89,8 +90,10 @@ export function App() {
   }
 
   return (
-    <ToastProvider>
-      <RouterProvider router={router} />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

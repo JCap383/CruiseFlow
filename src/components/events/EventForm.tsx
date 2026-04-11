@@ -32,6 +32,9 @@ interface EventFormProps {
   cruiseId: string;
   shipName: string;
   date: string;
+  /** Optional cruise window — when provided, the date picker is constrained to this range. */
+  cruiseStartDate?: string;
+  cruiseEndDate?: string;
   onSubmit: (data: Omit<CruiseEvent, 'id' | 'createdAt' | 'updatedAt'>) => void;
   onCancel: () => void;
 }
@@ -104,6 +107,8 @@ export function EventForm({
   cruiseId,
   shipName,
   date,
+  cruiseStartDate,
+  cruiseEndDate,
   onSubmit,
   onCancel,
 }: EventFormProps) {
@@ -131,6 +136,10 @@ export function EventForm({
 
   const [section, setSection] = useState<Section>('basics');
   const [title, setTitle] = useState(initialData?.title ?? '');
+  // #71: events are now editable on a different day after creation. We
+  // initialise from the existing event if there is one, otherwise from the
+  // `date` prop (which AddEditEvent passes through from selectedDate).
+  const [eventDate, setEventDate] = useState(initialData?.date ?? date);
   const [startTime, setStartTime] = useState(initialData?.startTime ?? '12:00');
   const [endTime, setEndTime] = useState(initialData?.endTime ?? '13:00');
   const [category, setCategory] = useState<EventCategory>(
@@ -145,8 +154,11 @@ export function EventForm({
   const [partySize, setPartySize] = useState(initialParsed.dining.partySize);
   const [dressCode, setDressCode] = useState(initialParsed.dining.dressCode);
   const [specialRequest, setSpecialRequest] = useState(initialParsed.dining.specialRequest);
+  // #86: New events used to default to *every* family member, which polluted
+  // the Family Dashboard if the user forgot to deselect. Default new events
+  // to no one selected — the People tab still lets users tag attendees.
   const [selectedMembers, setSelectedMembers] = useState<string[]>(
-    initialData?.memberIds ?? members.map((m) => m.id),
+    initialData?.memberIds ?? [],
   );
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(
     initialData?.reminderMinutes ?? null,
@@ -197,6 +209,7 @@ export function EventForm({
   useEffect(() => {
     if (initialData && !initialized) {
       setTitle(initialData.title);
+      setEventDate(initialData.date);
       setStartTime(initialData.startTime);
       setEndTime(initialData.endTime);
       setCategory(initialData.category);
@@ -284,7 +297,7 @@ export function EventForm({
     onSubmit({
       cruiseId,
       title: title.trim(),
-      date,
+      date: eventDate,
       startTime,
       endTime,
       category,
@@ -551,6 +564,18 @@ export function EventForm({
       {/* ── TIMING ───────────────────────────────────────────────── */}
       {section === 'timing' && (
         <div className="flex flex-col gap-5 animate-fade-slide-up">
+          {/* #71: Date picker — was missing entirely so events were stuck on
+              the day they were created. Constrained to the cruise window if
+              we know it. */}
+          <Input
+            id="eventDate"
+            label="Date"
+            type="date"
+            value={eventDate}
+            min={cruiseStartDate}
+            max={cruiseEndDate}
+            onChange={(e) => setEventDate(e.target.value)}
+          />
           <div>
             <div className="grid grid-cols-2 gap-3">
               <Input

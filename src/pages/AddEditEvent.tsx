@@ -30,7 +30,9 @@ export function AddEditEvent() {
     return (
       <div className="px-4 pt-2 pb-4">
         <h1 className="text-lg font-bold mb-4">Edit Event</h1>
-        <p className="text-cruise-muted text-sm">Loading...</p>
+        <p className="text-sm" style={{ color: 'var(--fg-muted)' }}>
+          Loading...
+        </p>
       </div>
     );
   }
@@ -58,6 +60,8 @@ export function AddEditEvent() {
         cruiseId={activeCruiseId}
         shipName={cruise?.shipName ?? ''}
         date={existingEvent?.date ?? selectedDate}
+        cruiseStartDate={cruise?.startDate}
+        cruiseEndDate={cruise?.endDate}
         onSubmit={handleSubmit}
         onCancel={() => navigate(-1)}
       />

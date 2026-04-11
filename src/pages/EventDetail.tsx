@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { format, parse, isValid } from 'date-fns';
 import {
   ArrowLeft,
   Clock,
+  Calendar,
   MapPin,
   Edit2,
   Trash2,
@@ -19,6 +21,7 @@ import { useEventConflicts } from '@/hooks/useConflicts';
 import { CATEGORY_CONFIG, MOOD_OPTIONS } from '@/types';
 import type { EventPhoto, MoodRating } from '@/types';
 import { formatTimeRange } from '@/utils/time';
+import { isValidIsoDate } from '@/stores/appStore';
 import { MemberChip } from '@/components/family/MemberAvatar';
 import { Button } from '@/components/ui/Button';
 import { PhotoLightbox } from '@/components/ui/PhotoLightbox';
@@ -67,11 +70,23 @@ export function EventDetail() {
 
   if (!event) {
     return (
-      <div className="p-6 text-center text-cruise-muted" role="status">
+      <div
+        className="p-6 text-center"
+        style={{ color: 'var(--fg-muted)' }}
+        role="status"
+      >
         Event not found
       </div>
     );
   }
+
+  // #77: humanized date label so users see *which day* the event lives on,
+  // not just the time. Falls back to the raw ISO string if parsing fails.
+  const eventDateLabel = (() => {
+    if (!isValidIsoDate(event.date)) return event.date;
+    const d = parse(event.date, 'yyyy-MM-dd', new Date());
+    return isValid(d) ? format(d, 'EEEE, MMM d, yyyy') : event.date;
+  })();
 
   const config = CATEGORY_CONFIG[event.category];
   const assignedMembers = members.filter((m) =>
@@ -150,10 +165,14 @@ export function EventDetail() {
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 pt-2 pb-2 border-b border-cruise-border">
+      <div
+        className="flex items-center gap-2 px-4 pt-2 pb-2"
+        style={{ borderBottom: '1px solid var(--border-default)' }}
+      >
         <button
           onClick={() => navigate(-1)}
-          className="text-cruise-muted p-1"
+          className="p-1 press"
+          style={{ color: 'var(--fg-muted)' }}
           aria-label="Go back"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -161,21 +180,29 @@ export function EventDetail() {
         <h1 className="text-lg font-bold flex-1">Event Details</h1>
         <button
           onClick={() => setShowShareMenu(true)}
-          className="text-cruise-muted p-1"
+          className="p-1 press"
+          style={{ color: 'var(--fg-muted)' }}
           aria-label="Share event"
         >
           <Share2 className="w-5 h-5" />
         </button>
         <button
           onClick={handleToggleFavorite}
-          className="p-1"
+          className="p-1 press"
           aria-label={event.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <Star className={`w-5 h-5 ${event.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-cruise-muted'}`} />
+          <Star
+            className="w-5 h-5"
+            style={{
+              color: event.isFavorite ? 'var(--warning)' : 'var(--fg-muted)',
+              fill: event.isFavorite ? 'var(--warning)' : 'transparent',
+            }}
+          />
         </button>
         <button
           onClick={() => navigate(`/event/${event.id}/edit`)}
-          className="text-ocean-400 p-1"
+          className="p-1 press"
+          style={{ color: 'var(--accent)' }}
           aria-label="Edit event"
         >
           <Edit2 className="w-5 h-5" />
@@ -197,15 +224,30 @@ export function EventDetail() {
 
         <h2 className="text-xl font-bold">{event.title}</h2>
 
+        {/* #77: Date row — surfaces which day this event belongs to. */}
+        <div
+          className="flex items-center gap-2"
+          style={{ color: 'var(--fg-muted)' }}
+        >
+          <Calendar className="w-4 h-4" aria-hidden="true" />
+          <span>{eventDateLabel}</span>
+        </div>
+
         {/* Time */}
-        <div className="flex items-center gap-2 text-cruise-muted">
+        <div
+          className="flex items-center gap-2"
+          style={{ color: 'var(--fg-muted)' }}
+        >
           <Clock className="w-4 h-4" aria-hidden="true" />
           <span>{formatTimeRange(event.startTime, event.endTime)}</span>
         </div>
 
         {/* Venue */}
         {event.venue && (
-          <div className="flex items-center gap-2 text-cruise-muted">
+          <div
+            className="flex items-center gap-2"
+            style={{ color: 'var(--fg-muted)' }}
+          >
             <MapPin className="w-4 h-4" aria-hidden="true" />
             <span>
               {event.venue}
@@ -216,32 +258,50 @@ export function EventDetail() {
 
         {/* Mood picker */}
         <div>
-          <span className="text-sm text-cruise-muted block mb-2">How was it?</span>
+          <span
+            className="text-sm block mb-2"
+            style={{ color: 'var(--fg-muted)' }}
+          >
+            How was it?
+          </span>
           <div className="flex gap-2" role="radiogroup" aria-label="Rate this event">
-            {MOOD_OPTIONS.map(({ emoji, label }) => (
-              <button
-                key={emoji}
-                onClick={() => handleSetMood(emoji)}
-                role="radio"
-                aria-checked={event.mood === emoji}
-                aria-label={label}
-                className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl border transition-colors ${
-                  event.mood === emoji
-                    ? 'bg-ocean-500/20 border-ocean-500'
-                    : 'bg-cruise-card border-cruise-border'
-                }`}
-              >
-                <span className="text-xl">{emoji}</span>
-                <span className="text-[10px] text-cruise-muted">{label}</span>
-              </button>
-            ))}
+            {MOOD_OPTIONS.map(({ emoji, label }) => {
+              const active = event.mood === emoji;
+              return (
+                <button
+                  key={emoji}
+                  onClick={() => handleSetMood(emoji)}
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={label}
+                  className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-xl press transition-colors"
+                  style={{
+                    backgroundColor: active
+                      ? 'var(--accent-soft)'
+                      : 'var(--bg-card)',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                  }}
+                >
+                  <span className="text-xl">{emoji}</span>
+                  <span
+                    className="text-[10px]"
+                    style={{ color: 'var(--fg-muted)' }}
+                  >
+                    {label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Members */}
         {assignedMembers.length > 0 && (
           <div>
-            <span className="text-sm text-cruise-muted block mb-2">
+            <span
+              className="text-sm block mb-2"
+              style={{ color: 'var(--fg-muted)' }}
+            >
               Attendees
             </span>
             <div className="flex flex-wrap gap-2">
@@ -255,24 +315,47 @@ export function EventDetail() {
         {/* Booking details */}
         {hasBooking && meta.booking && (
           <div>
-            <span className="text-sm text-cruise-muted block mb-1">Booking</span>
-            <div className="bg-cruise-card rounded-xl p-3 border border-cruise-border flex flex-col gap-1 text-sm">
+            <span
+              className="text-sm block mb-1"
+              style={{ color: 'var(--fg-muted)' }}
+            >
+              Booking
+            </span>
+            <div
+              className="rounded-xl p-3 flex flex-col gap-1 text-sm"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+              }}
+            >
               {meta.booking.status && (
                 <div className="flex justify-between">
-                  <span className="text-cruise-muted">Status</span>
-                  <span className="text-cruise-text capitalize">{meta.booking.status}</span>
+                  <span style={{ color: 'var(--fg-muted)' }}>Status</span>
+                  <span
+                    className="capitalize"
+                    style={{ color: 'var(--fg-default)' }}
+                  >
+                    {meta.booking.status}
+                  </span>
                 </div>
               )}
               {meta.booking.confirmation && (
                 <div className="flex justify-between">
-                  <span className="text-cruise-muted">Confirmation</span>
-                  <span className="text-cruise-text font-mono">{meta.booking.confirmation}</span>
+                  <span style={{ color: 'var(--fg-muted)' }}>Confirmation</span>
+                  <span
+                    className="font-mono"
+                    style={{ color: 'var(--fg-default)' }}
+                  >
+                    {meta.booking.confirmation}
+                  </span>
                 </div>
               )}
               {meta.booking.cost && (
                 <div className="flex justify-between">
-                  <span className="text-cruise-muted">Cost</span>
-                  <span className="text-cruise-text">{meta.booking.cost}</span>
+                  <span style={{ color: 'var(--fg-muted)' }}>Cost</span>
+                  <span style={{ color: 'var(--fg-default)' }}>
+                    {meta.booking.cost}
+                  </span>
                 </div>
               )}
             </div>
@@ -282,24 +365,52 @@ export function EventDetail() {
         {/* Dining details */}
         {hasDining && meta.dining && (
           <div>
-            <span className="text-sm text-cruise-muted block mb-1">Dining</span>
-            <div className="bg-cruise-card rounded-xl p-3 border border-cruise-border flex flex-col gap-1 text-sm">
+            <span
+              className="text-sm block mb-1"
+              style={{ color: 'var(--fg-muted)' }}
+            >
+              Dining
+            </span>
+            <div
+              className="rounded-xl p-3 flex flex-col gap-1 text-sm"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+              }}
+            >
               {meta.dining.partySize && (
                 <div className="flex justify-between">
-                  <span className="text-cruise-muted">Party size</span>
-                  <span className="text-cruise-text">{meta.dining.partySize}</span>
+                  <span style={{ color: 'var(--fg-muted)' }}>Party size</span>
+                  <span style={{ color: 'var(--fg-default)' }}>
+                    {meta.dining.partySize}
+                  </span>
                 </div>
               )}
               {meta.dining.dressCode && (
                 <div className="flex justify-between">
-                  <span className="text-cruise-muted">Dress code</span>
-                  <span className="text-cruise-text capitalize">{meta.dining.dressCode.replace('-', ' ')}</span>
+                  <span style={{ color: 'var(--fg-muted)' }}>Dress code</span>
+                  <span
+                    className="capitalize"
+                    style={{ color: 'var(--fg-default)' }}
+                  >
+                    {meta.dining.dressCode.replace('-', ' ')}
+                  </span>
                 </div>
               )}
               {meta.dining.specialRequest && (
                 <div className="flex justify-between gap-2">
-                  <span className="text-cruise-muted shrink-0">Request</span>
-                  <span className="text-cruise-text text-right">{meta.dining.specialRequest}</span>
+                  <span
+                    className="shrink-0"
+                    style={{ color: 'var(--fg-muted)' }}
+                  >
+                    Request
+                  </span>
+                  <span
+                    className="text-right"
+                    style={{ color: 'var(--fg-default)' }}
+                  >
+                    {meta.dining.specialRequest}
+                  </span>
                 </div>
               )}
             </div>
@@ -309,8 +420,20 @@ export function EventDetail() {
         {/* Notes */}
         {meta.base && (
           <div>
-            <span className="text-sm text-cruise-muted block mb-1">Notes</span>
-            <p className="text-cruise-text bg-cruise-card rounded-xl p-3 border border-cruise-border whitespace-pre-wrap">
+            <span
+              className="text-sm block mb-1"
+              style={{ color: 'var(--fg-muted)' }}
+            >
+              Notes
+            </span>
+            <p
+              className="rounded-xl p-3 whitespace-pre-wrap"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+                color: 'var(--fg-default)',
+              }}
+            >
               {meta.base}
             </p>
           </div>
@@ -318,7 +441,10 @@ export function EventDetail() {
 
         {/* Reminder */}
         {event.reminderMinutes != null && (
-          <div className="flex items-center gap-2 text-sm text-cruise-muted">
+          <div
+            className="flex items-center gap-2 text-sm"
+            style={{ color: 'var(--fg-muted)' }}
+          >
             <span>⏰</span>
             <span>Reminder {event.reminderMinutes} min before</span>
           </div>
@@ -327,12 +453,19 @@ export function EventDetail() {
         {/* Photos */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-cruise-muted">
+            <span
+              className="text-sm"
+              style={{ color: 'var(--fg-muted)' }}
+            >
               Photos {photos.length > 0 && `(${photos.length})`}
             </span>
             <button
               onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1.5 text-xs text-ocean-400 bg-ocean-400/10 px-3 py-1.5 rounded-full"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full press"
+              style={{
+                color: 'var(--accent)',
+                backgroundColor: 'var(--accent-soft)',
+              }}
               aria-label="Add photo"
             >
               <Camera className="w-3.5 h-3.5" />
@@ -358,7 +491,8 @@ export function EventDetail() {
                   onClick={() => setLightboxIndex(photoIdx)}
                   tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightboxIndex(photoIdx); }}}
-                  className="relative aspect-square rounded-xl overflow-hidden bg-cruise-surface cursor-pointer"
+                  className="relative aspect-square rounded-xl overflow-hidden cursor-pointer"
+                  style={{ backgroundColor: 'var(--bg-card)' }}
                   aria-label={photo.caption || `Photo ${photoIdx + 1}`}
                 >
                   <img
@@ -371,10 +505,14 @@ export function EventDetail() {
                       e.stopPropagation();
                       setDeletePhotoId(photo.id);
                     }}
-                    className="absolute top-1 right-1 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center"
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center"
+                    style={{
+                      backgroundColor: 'rgba(0,0,0,0.6)',
+                      color: 'rgba(255,255,255,0.92)',
+                    }}
                     aria-label="Delete photo"
                   >
-                    <X className="w-3.5 h-3.5 text-white" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
@@ -382,7 +520,11 @@ export function EventDetail() {
           ) : (
             <button
               onClick={() => fileRef.current?.click()}
-              className="w-full border-2 border-dashed border-cruise-border rounded-xl p-6 text-center text-cruise-muted/50 text-sm"
+              className="w-full rounded-xl p-6 text-center text-sm press"
+              style={{
+                border: '2px dashed var(--border-default)',
+                color: 'var(--fg-subtle)',
+              }}
             >
               Tap to add photos from this event
             </button>
@@ -391,10 +533,24 @@ export function EventDetail() {
 
         {/* Conflicts */}
         {conflicts.length > 0 && (
-          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl" role="alert">
+          <div
+            className="p-3 rounded-xl"
+            style={{
+              backgroundColor: 'var(--warning-soft)',
+              border: '1px solid var(--warning)',
+            }}
+            role="alert"
+          >
             <div className="flex items-center gap-2 mb-1">
-              <AlertTriangle className="w-4 h-4 text-amber-400" aria-hidden="true" />
-              <span className="text-sm font-medium text-amber-300">
+              <AlertTriangle
+                className="w-4 h-4"
+                style={{ color: 'var(--warning)' }}
+                aria-hidden="true"
+              />
+              <span
+                className="text-sm font-medium"
+                style={{ color: 'var(--warning)' }}
+              >
                 Schedule Conflict
               </span>
             </div>
@@ -405,7 +561,11 @@ export function EventDetail() {
                 c.memberIds.includes(m.id),
               );
               return (
-                <p key={i} className="text-sm text-amber-200/80 mt-1">
+                <p
+                  key={i}
+                  className="text-sm mt-1"
+                  style={{ color: 'var(--fg-muted)' }}
+                >
                   Overlaps with &ldquo;{other.title}&rdquo; for{' '}
                   {conflictMembers.map((m) => m.name).join(', ')}
                 </p>

@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addDays, subDays, format, parse } from 'date-fns';
+import { addDays, subDays, format, parse, isValid } from 'date-fns';
 import {
   ChevronLeft,
   ChevronRight,
@@ -127,8 +127,26 @@ export function DailySchedule() {
     }
   };
 
-  const dateObj = parse(selectedDate, 'yyyy-MM-dd', new Date());
-  const dayLabel = format(dateObj, 'EEEE, MMM d');
+  // #89: Defensive clamp. If selectedDate sits outside the active cruise
+  // window (e.g. the user just switched cruises and the persisted date is
+  // from the previous trip), pull it back to the nearest endpoint so the
+  // user is never stranded with both prev/next disabled.
+  useEffect(() => {
+    if (!cruise?.startDate || !cruise?.endDate) return;
+    if (selectedDate < cruise.startDate) {
+      setSelectedDate(cruise.startDate);
+    } else if (selectedDate > cruise.endDate) {
+      setSelectedDate(cruise.endDate);
+    }
+  }, [cruise?.startDate, cruise?.endDate, selectedDate, setSelectedDate]);
+
+  // #68 hardening: be defensive against malformed selectedDate. If parse
+  // returns Invalid Date, fall back to today instead of crashing on format().
+  const parsed = parse(selectedDate, 'yyyy-MM-dd', new Date());
+  const dateObj = isValid(parsed) ? parsed : new Date();
+  // #78: include the year so users can tell which trip they're looking at
+  // when bouncing between past/future cruises.
+  const dayLabel = format(dateObj, 'EEE, MMM d, yyyy');
 
   const canGoPrev = !cruise?.startDate || selectedDate > cruise.startDate;
   const canGoNext = !cruise?.endDate || selectedDate < cruise.endDate;
@@ -137,6 +155,28 @@ export function DailySchedule() {
     void haptics.tap();
     const fn = dir === 'prev' ? subDays : addDays;
     setSelectedDate(format(fn(dateObj, 1), 'yyyy-MM-dd'));
+  };
+
+  // #74: tapping the date label opens a real calendar picker via a hidden
+  // <input type="date">. Constrained to the cruise window so users can't
+  // wander outside the trip.
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const openDatePicker = () => {
+    void haptics.tap();
+    const el = dateInputRef.current;
+    if (!el) return;
+    // showPicker() is the only way to programmatically open the native
+    // calendar; fall back to focus() on browsers that don't support it.
+    if (typeof el.showPicker === 'function') {
+      try {
+        el.showPicker();
+        return;
+      } catch {
+        // ignore — fall through to focus
+      }
+    }
+    el.focus();
+    el.click();
   };
 
   const clearFilters = () => {
@@ -190,15 +230,40 @@ export function DailySchedule() {
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <Text
-            variant="callout"
-            weight="semibold"
-            align="center"
-            tone="accent"
-            aria-live="polite"
+          <button
+            type="button"
+            onClick={openDatePicker}
+            className="relative px-2 py-1 rounded-lg press"
+            style={{ color: 'var(--accent)', minHeight: 44 }}
+            aria-label={`Change date — currently ${dayLabel}`}
           >
-            {dayLabel}
-          </Text>
+            <Text
+              variant="callout"
+              weight="semibold"
+              align="center"
+              tone="accent"
+              aria-live="polite"
+            >
+              {dayLabel}
+            </Text>
+            {/* #74: Hidden but interactive native date input. We don't use
+                sr-only because Safari refuses to show a calendar for an
+                element with display:none. Pin it under the visible label
+                so the popup anchors correctly. */}
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={selectedDate}
+              min={cruise?.startDate}
+              max={cruise?.endDate}
+              onChange={(e) => {
+                if (e.target.value) setSelectedDate(e.target.value);
+              }}
+              aria-hidden="true"
+              tabIndex={-1}
+              className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
+            />
+          </button>
           <button
             onClick={() => goDay('next')}
             disabled={!canGoNext}

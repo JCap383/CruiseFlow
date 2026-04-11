@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { format, parse, isValid } from 'date-fns';
 import {
   Ship,
   Plus,
@@ -25,12 +26,19 @@ import {
   Check,
   Anchor,
   ArrowRightLeft,
+  Pencil,
 } from 'lucide-react';
 import { useCruise, useCruises, updateCruise, deleteCruise } from '@/hooks/useCruise';
 import { ShipPicker } from '@/components/ships/ShipPicker';
 import { getCruiseLineForShip } from '@/db/shipCatalog';
-import { useFamily, addMember, deleteMember } from '@/hooks/useFamily';
+import {
+  useFamily,
+  addMember,
+  updateMember,
+  deleteMember,
+} from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
+import type { FamilyMember } from '@/types';
 import type { ThemePreference } from '@/stores/appStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -51,11 +59,36 @@ import {
   restoreBackup,
   type BackupData,
 } from '@/utils/backup';
+import { isValidIsoDate } from '@/stores/appStore';
+
+// #82: format ISO dates as friendly labels (e.g. "Jul 10, 2026"). Falls
+// back to the raw string if the value isn't a parseable yyyy-MM-dd, so we
+// never crash on partially-typed input from the date picker.
+function formatTripDate(iso: string | undefined | null): string {
+  if (!iso) return '';
+  if (!isValidIsoDate(iso)) return iso;
+  const d = parse(iso, 'yyyy-MM-dd', new Date());
+  return isValid(d) ? format(d, 'MMM d, yyyy') : iso;
+}
+
+// #73 / #92: clamp a yyyy-MM-dd date into a cruise's window so we never
+// strand the user on a day that doesn't belong to the active trip.
+function clampDateToCruise(
+  date: string,
+  startDate: string,
+  endDate: string,
+): string {
+  if (!isValidIsoDate(date)) return startDate;
+  if (date < startDate) return startDate;
+  if (date > endDate) return endDate;
+  return date;
+}
 
 export function Settings() {
   const navigate = useNavigate();
   const activeCruiseId = useAppStore((s) => s.activeCruiseId);
   const setActiveCruise = useAppStore((s) => s.setActiveCruise);
+  const setSelectedDate = useAppStore((s) => s.setSelectedDate);
   const apiKey = useAppStore((s) => s.apiKey);
   const setApiKey = useAppStore((s) => s.setApiKey);
   const theme = useAppStore((s) => s.theme);
@@ -79,9 +112,26 @@ export function Settings() {
   // Edit cruise state
   const [cruiseName, setCruiseName] = useState('');
   const [shipName, setShipName] = useState('');
+  // #72: trip start/end are now editable from Settings (the previous flow
+  // forced you to delete and re-create the cruise just to fix a typo).
+  const [cruiseStartDate, setCruiseStartDate] = useState('');
+  const [cruiseEndDate, setCruiseEndDate] = useState('');
 
   // Family state
   const [newMemberName, setNewMemberName] = useState('');
+  // #84: emoji + child toggle for new members so the add flow no longer
+  // silently picks defaults the user can't see.
+  const [newMemberEmoji, setNewMemberEmoji] = useState<string>(
+    MEMBER_EMOJIS[0]!,
+  );
+  const [newMemberIsChild, setNewMemberIsChild] = useState(false);
+  // #83: edit-in-place for an existing family member.
+  const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
+  const [editMemberName, setEditMemberName] = useState('');
+  const [editMemberEmoji, setEditMemberEmoji] = useState<string>(
+    MEMBER_EMOJIS[0]!,
+  );
+  const [editMemberIsChild, setEditMemberIsChild] = useState(false);
 
   // API key
   const [showApiKey, setShowApiKey] = useState(false);
@@ -101,20 +151,46 @@ export function Settings() {
     if (cruise) {
       setCruiseName(cruise.name);
       setShipName(cruise.shipName);
+      setCruiseStartDate(cruise.startDate);
+      setCruiseEndDate(cruise.endDate);
       setShowCruiseSheet(true);
     }
   };
 
   const handleSaveCruise = async () => {
-    if (activeCruiseId) {
-      await updateCruise(activeCruiseId, {
-        name: cruiseName,
-        shipName,
-      });
-      setShowCruiseSheet(false);
-      toast.success('Trip details saved');
-      void haptics.success();
+    if (!activeCruiseId) return;
+    // #72: validate the new window before persisting. If the user typed an
+    // end date that comes before the start, swap them rather than refusing
+    // — the most likely intent.
+    let nextStart = cruiseStartDate;
+    let nextEnd = cruiseEndDate;
+    if (
+      isValidIsoDate(nextStart) &&
+      isValidIsoDate(nextEnd) &&
+      nextEnd < nextStart
+    ) {
+      [nextStart, nextEnd] = [nextEnd, nextStart];
     }
+    if (!isValidIsoDate(nextStart) || !isValidIsoDate(nextEnd)) {
+      toast.error('Please pick valid start and end dates');
+      return;
+    }
+    await updateCruise(activeCruiseId, {
+      name: cruiseName,
+      shipName,
+      startDate: nextStart,
+      endDate: nextEnd,
+    });
+    // #73: pull the currently-selected day back into the new window so the
+    // schedule view doesn't end up showing an empty out-of-range day.
+    const currentSelected = useAppStore.getState().selectedDate;
+    const clamped = clampDateToCruise(currentSelected, nextStart, nextEnd);
+    if (clamped !== currentSelected) {
+      setSelectedDate(clamped);
+    }
+    setShowCruiseSheet(false);
+    toast.success('Trip details saved');
+    void haptics.success();
   };
 
   const handleAddMember = async () => {
@@ -122,16 +198,45 @@ export function Settings() {
     await addMember({
       cruiseId: activeCruiseId,
       name: newMemberName.trim(),
-      emoji: MEMBER_EMOJIS[members.length % MEMBER_EMOJIS.length]!,
+      emoji: newMemberEmoji,
+      // Cycle colors so each new member still picks up a distinct accent.
       color: MEMBER_COLORS[members.length % MEMBER_COLORS.length]!,
-      isChild: false,
+      isChild: newMemberIsChild,
     });
     setNewMemberName('');
+    setNewMemberIsChild(false);
+    setNewMemberEmoji(
+      MEMBER_EMOJIS[(members.length + 1) % MEMBER_EMOJIS.length]!,
+    );
     void haptics.tap();
+  };
+
+  // #83: open the inline editor for a member.
+  const openEditMember = (m: FamilyMember) => {
+    setEditingMember(m);
+    setEditMemberName(m.name);
+    setEditMemberEmoji(m.emoji);
+    setEditMemberIsChild(m.isChild);
+  };
+
+  const handleSaveMember = async () => {
+    if (!editingMember) return;
+    if (!editMemberName.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+    await updateMember(editingMember.id, {
+      name: editMemberName.trim(),
+      emoji: editMemberEmoji,
+      isChild: editMemberIsChild,
+    });
+    setEditingMember(null);
+    void haptics.success();
   };
 
   const handleDeleteMember = async (id: string) => {
     await deleteMember(id);
+    if (editingMember?.id === id) setEditingMember(null);
     void haptics.warning();
   };
 
@@ -147,6 +252,15 @@ export function Settings() {
     if (remaining.length > 0) {
       const next = [...remaining].sort((a, b) => b.createdAt - a.createdAt)[0]!;
       setActiveCruise(next.id);
+      // #73: snap the selected date into the next cruise's window so the
+      // schedule doesn't open on a deleted-trip date.
+      setSelectedDate(
+        clampDateToCruise(
+          useAppStore.getState().selectedDate,
+          next.startDate,
+          next.endDate,
+        ),
+      );
       toast.success(`Switched to ${next.name}`);
       navigate('/');
     } else {
@@ -240,7 +354,17 @@ export function Settings() {
     try {
       const counts = await restoreBackup(restorePreview);
       if (restorePreview.cruises.length > 0) {
-        setActiveCruise(restorePreview.cruises[0]!.id);
+        const firstCruise = restorePreview.cruises[0]!;
+        setActiveCruise(firstCruise.id);
+        // #92: the persisted selectedDate almost certainly belongs to a
+        // different (now-replaced) cruise. Snap it into the restored
+        // cruise's window so the schedule view opens on a real day.
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const seed =
+          today >= firstCruise.startDate && today <= firstCruise.endDate
+            ? today
+            : firstCruise.startDate;
+        setSelectedDate(seed);
       }
       toast.success(
         `Restored ${counts.cruises} cruise, ${counts.members} members, ${counts.events} events`,
@@ -322,26 +446,25 @@ export function Settings() {
           footer={
             cruises.length > 1
               ? `You have ${cruises.length} cruises saved. Tap "Switch cruise" to change the active one.`
-              : 'Tap to edit this trip, or use "Switch cruise" to plan another.'
+              : 'Tap to edit this trip, or add a new cruise to plan another.'
           }
         >
           <ListRow
             icon={<Ship className="w-4 h-4" />}
             title={cruise.name}
-            subtitle={`${cruise.shipName} · ${cruise.startDate} → ${cruise.endDate}`}
+            subtitle={`${cruise.shipName} · ${formatTripDate(cruise.startDate)} → ${formatTripDate(cruise.endDate)}`}
             onClick={openCruiseEditor}
             ariaLabel={`Edit trip ${cruise.name}`}
           />
-          <ListRow
-            icon={<ArrowRightLeft className="w-4 h-4" />}
-            title="Switch cruise"
-            subtitle={
-              cruises.length > 1
-                ? `${cruises.length} cruises available`
-                : 'Create another cruise to switch'
-            }
-            onClick={() => setShowCruiseSwitcher(true)}
-          />
+          {/* #85: hide switch row when there's nothing to switch to. */}
+          {cruises.length > 1 && (
+            <ListRow
+              icon={<ArrowRightLeft className="w-4 h-4" />}
+              title="Switch cruise"
+              subtitle={`${cruises.length} cruises available`}
+              onClick={() => setShowCruiseSwitcher(true)}
+            />
+          )}
           <ListRow
             icon={<Plus className="w-4 h-4" />}
             title="New cruise"
@@ -531,6 +654,24 @@ export function Settings() {
             value={shipName}
             onChange={setShipName}
           />
+          {/* #72: editable trip dates so users don't have to delete + recreate. */}
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              id="editCruiseStart"
+              label="Start"
+              type="date"
+              value={cruiseStartDate}
+              onChange={(e) => setCruiseStartDate(e.target.value)}
+            />
+            <Input
+              id="editCruiseEnd"
+              label="End"
+              type="date"
+              value={cruiseEndDate}
+              min={cruiseStartDate || undefined}
+              onChange={(e) => setCruiseEndDate(e.target.value)}
+            />
+          </div>
           <div className="flex gap-2 pt-1">
             <Button
               variant="secondary"
@@ -577,6 +718,16 @@ export function Settings() {
                       onClick={() => {
                         if (!active) {
                           setActiveCruise(c.id);
+                          // #73: clamp selectedDate into the new cruise's
+                          // window so we don't land on an empty day from the
+                          // previous trip.
+                          setSelectedDate(
+                            clampDateToCruise(
+                              useAppStore.getState().selectedDate,
+                              c.startDate,
+                              c.endDate,
+                            ),
+                          );
                           void haptics.success();
                           toast.success(`Switched to ${c.name}`);
                         }
@@ -616,7 +767,7 @@ export function Settings() {
                           style={{ color: 'var(--fg-subtle)' }}
                         >
                           {c.shipName}
-                          {line ? ` · ${line.shortName}` : ''} · {c.startDate} → {c.endDate}
+                          {line ? ` · ${line.shortName}` : ''} · {formatTripDate(c.startDate)} → {formatTripDate(c.endDate)}
                         </div>
                       </div>
                       {active && (
@@ -648,7 +799,10 @@ export function Settings() {
       {/* ── Sheet: Family members ───────────────────────────── */}
       <Sheet
         open={showFamilySheet}
-        onClose={() => setShowFamilySheet(false)}
+        onClose={() => {
+          setShowFamilySheet(false);
+          setEditingMember(null);
+        }}
         title="Family members"
       >
         <div className="px-4 pt-1 pb-4 flex flex-col gap-3">
@@ -685,6 +839,18 @@ export function Settings() {
                       Child
                     </span>
                   )}
+                  {/* #83: edit-in-place — previously the only action was
+                      delete + re-add, which lost any historical event
+                      assignments referencing the old member id. */}
+                  <button
+                    type="button"
+                    onClick={() => openEditMember(m)}
+                    className="p-2 rounded-full press"
+                    style={{ color: 'var(--fg-muted)', minWidth: 36, minHeight: 36 }}
+                    aria-label={`Edit ${m.name}`}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleDeleteMember(m.id)}
@@ -698,31 +864,175 @@ export function Settings() {
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2 pt-1">
-            <div className="flex-1">
-              <Input
-                id="newMember"
-                label="Add a person"
-                placeholder="Name"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void handleAddMember();
-                  }
-                }}
-              />
+          {/* #84: full add-member form with name, emoji, and child toggle. */}
+          <div
+            className="flex flex-col gap-3 pt-2 mt-2"
+            style={{ borderTop: '1px solid var(--border-default)' }}
+          >
+            <Text variant="footnote" tone="muted">
+              Add a person
+            </Text>
+            <Input
+              id="newMember"
+              label="Name"
+              placeholder="e.g. Alex"
+              value={newMemberName}
+              onChange={(e) => setNewMemberName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleAddMember();
+                }
+              }}
+            />
+            <div className="flex flex-col gap-1.5">
+              <span
+                className="text-subhead font-medium"
+                style={{ color: 'var(--fg-muted)' }}
+              >
+                Emoji
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {MEMBER_EMOJIS.map((emoji) => {
+                  const active = newMemberEmoji === emoji;
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setNewMemberEmoji(emoji)}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-lg press"
+                      style={{
+                        backgroundColor: active
+                          ? 'var(--accent-soft)'
+                          : 'var(--bg-card)',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                      }}
+                      aria-label={`Pick ${emoji}`}
+                      aria-pressed={active}
+                    >
+                      {emoji}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+            <label
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl press cursor-pointer"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={newMemberIsChild}
+                onChange={(e) => setNewMemberIsChild(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span
+                className="text-callout"
+                style={{ color: 'var(--fg-default)' }}
+              >
+                This person is a child
+              </span>
+            </label>
             <Button
               onClick={handleAddMember}
               variant="secondary"
+              fullWidth
               leadingIcon={<Plus className="w-4 h-4" />}
             >
-              Add
+              Add person
             </Button>
           </div>
         </div>
+      </Sheet>
+
+      {/* ── Sheet: Edit family member ───────────────────────── */}
+      <Sheet
+        open={editingMember !== null}
+        onClose={() => setEditingMember(null)}
+        title="Edit member"
+      >
+        {editingMember && (
+          <div className="px-4 pt-1 pb-4 flex flex-col gap-3">
+            <Input
+              id="editMemberName"
+              label="Name"
+              value={editMemberName}
+              onChange={(e) => setEditMemberName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleSaveMember();
+                }
+              }}
+            />
+            <div className="flex flex-col gap-1.5">
+              <span
+                className="text-subhead font-medium"
+                style={{ color: 'var(--fg-muted)' }}
+              >
+                Emoji
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {MEMBER_EMOJIS.map((emoji) => {
+                  const active = editMemberEmoji === emoji;
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setEditMemberEmoji(emoji)}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-lg press"
+                      style={{
+                        backgroundColor: active
+                          ? 'var(--accent-soft)'
+                          : 'var(--bg-card)',
+                        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-default)'}`,
+                      }}
+                      aria-label={`Pick ${emoji}`}
+                      aria-pressed={active}
+                    >
+                      {emoji}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <label
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl press cursor-pointer"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={editMemberIsChild}
+                onChange={(e) => setEditMemberIsChild(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span
+                className="text-callout"
+                style={{ color: 'var(--fg-default)' }}
+              >
+                This person is a child
+              </span>
+            </label>
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => setEditingMember(null)}
+              >
+                Cancel
+              </Button>
+              <Button fullWidth onClick={handleSaveMember}>
+                Save
+              </Button>
+            </div>
+          </div>
+        )}
       </Sheet>
 
       {/* ── Sheet: API key ──────────────────────────────────── */}
@@ -731,7 +1041,16 @@ export function Settings() {
         onClose={() => setShowApiSheet(false)}
         title="Gemini API key"
       >
-        <div className="px-4 pt-1 pb-4 flex flex-col gap-3">
+        {/* #91: wrap in a <form> so the on-screen keyboard's Go/Return key
+            saves and dismisses the sheet — previously Enter did nothing. */}
+        <form
+          className="px-4 pt-1 pb-4 flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setShowApiSheet(false);
+            void haptics.success();
+          }}
+        >
           <Text variant="footnote" tone="muted">
             Free from aistudio.google.com/apikey — used only by the cruise
             concierge, stored on this device.
@@ -745,6 +1064,8 @@ export function Settings() {
               placeholder="AIza..."
               leadingIcon={<Key className="w-4 h-4" />}
               aria-label="API key"
+              autoComplete="off"
+              spellCheck={false}
             />
             <button
               type="button"
@@ -756,10 +1077,10 @@ export function Settings() {
               {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
-          <Button fullWidth onClick={() => setShowApiSheet(false)}>
+          <Button type="submit" fullWidth>
             Done
           </Button>
-        </div>
+        </form>
       </Sheet>
 
       {/* ── Sheet: Theme ────────────────────────────────────── */}
