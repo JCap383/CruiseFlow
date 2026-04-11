@@ -630,9 +630,15 @@ export function Settings() {
           />
         </ListGroup>
 
-        <Text variant="caption" tone="subtle" align="center" className="pt-2">
-          CruiseFlow · Made for the sea
-        </Text>
+        <div className="pt-2 flex flex-col items-center gap-0.5">
+          <Text variant="caption" tone="subtle" align="center">
+            CruiseFlow · Made for the sea
+          </Text>
+          <Text variant="caption" tone="subtle" align="center">
+            v{__APP_VERSION__} · build {__BUILD_COMMIT__} ·{' '}
+            {new Date(__BUILD_TIME__).toLocaleString()}
+          </Text>
+        </div>
       </div>
 
       {/* ── Sheet: Edit cruise ──────────────────────────────── */}

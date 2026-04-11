@@ -3,8 +3,26 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
 
 const isNativeBuild = process.env.CAPACITOR_BUILD === 'true';
+
+// Build identifiers — surfaced in the UI (Settings page) so users can
+// tell which version of the app they're running. Resolved at build time
+// and inlined via Vite's `define` so there's no runtime cost.
+const pkg = JSON.parse(
+  readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'),
+) as { version: string };
+
+let buildCommit = 'unknown';
+try {
+  buildCommit = execSync('git rev-parse --short HEAD').toString().trim();
+} catch {
+  // Git may not be available (e.g. in some CI sandboxes); fall through.
+}
+
+const buildTime = new Date().toISOString();
 
 export default defineConfig({
   plugins: [
@@ -51,5 +69,10 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_COMMIT__: JSON.stringify(buildCommit),
+    __BUILD_TIME__: JSON.stringify(buildTime),
   },
 });
