@@ -16,6 +16,17 @@ export const MOOD_OPTIONS: { emoji: MoodRating; label: string }[] = [
   { emoji: '😴', label: 'Meh' },
 ];
 
+/**
+ * A photo of the day's printed ship bulletin (Freestyle Daily, Cruise
+ * Compass, FunTimes, Patter, etc.). Reference only — never transmitted.
+ * See issue #95.
+ */
+export interface DailyBulletin {
+  front: string; // photoDataUrl on web; filesystem URI on native
+  back?: string; // optional back-side photo (same storage as front)
+  updatedAt: number;
+}
+
 export interface Cruise {
   id: string;
   name: string;
@@ -23,6 +34,12 @@ export interface Cruise {
   startDate: string; // ISO date "2026-07-10"
   endDate: string;
   coverPhotos: Record<string, string>; // date -> photoDataUrl
+  /**
+   * Per-day ship bulletin photos. Key is the ISO date (`yyyy-MM-dd`).
+   * Introduced in #95; optional so existing cruises stay valid and the
+   * field can be omitted from serialization when empty.
+   */
+  dailyBulletins?: Record<string, DailyBulletin>;
   createdAt: number;
 }
 

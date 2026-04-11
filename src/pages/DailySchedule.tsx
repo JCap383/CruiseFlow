@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { addDays, subDays, format, parse, isValid } from 'date-fns';
+import { addDays, subDays, format, parse, isValid, differenceInDays } from 'date-fns';
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,6 +23,7 @@ import { isCurrentlyActive } from '@/utils/time';
 import type { EventPhoto, EventCategory } from '@/types';
 import { CATEGORY_CONFIG } from '@/types';
 import { OnThisDay } from '@/components/memories/OnThisDay';
+import { DailyBulletinCard } from '@/components/memories/DailyBulletinCard';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
@@ -147,6 +148,17 @@ export function DailySchedule() {
   // #78: include the year so users can tell which trip they're looking at
   // when bouncing between past/future cruises.
   const dayLabel = format(dateObj, 'EEE, MMM d, yyyy');
+
+  // #95: day-number + weekday derivation used by the DailyBulletinCard
+  // label ("Day 3 · Tuesday"). We compute both unconditionally (even when
+  // there's no cruise) so the card can always render *something* sensible.
+  const weekdayLabel = format(dateObj, 'EEEE');
+  const dayNumFromStart = cruise?.startDate
+    ? differenceInDays(dateObj, parse(cruise.startDate, 'yyyy-MM-dd', new Date())) + 1
+    : null;
+  const cruiseDayNum =
+    dayNumFromStart && dayNumFromStart >= 1 ? dayNumFromStart : null;
+  const currentBulletin = cruise?.dailyBulletins?.[selectedDate];
 
   const canGoPrev = !cruise?.startDate || selectedDate > cruise.startDate;
   const canGoNext = !cruise?.endDate || selectedDate < cruise.endDate;
@@ -367,6 +379,20 @@ export function DailySchedule() {
           </div>
         )}
       </div>
+
+      {/* #95: Daily bulletin card (ship's printed schedule photo). Always
+          rendered when there's an active cruise so the empty-state camera
+          prompt is discoverable on every day of the trip. */}
+      {activeCruiseId && (
+        <DailyBulletinCard
+          cruiseId={activeCruiseId}
+          date={selectedDate}
+          dayNum={cruiseDayNum}
+          weekday={weekdayLabel}
+          bulletin={currentBulletin}
+          dailyBulletins={cruise?.dailyBulletins}
+        />
+      )}
 
       {/* On This Day memories */}
       <OnThisDay />

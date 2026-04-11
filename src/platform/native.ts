@@ -61,6 +61,7 @@ async function createTables(conn: SQLiteDBConnection): Promise<void> {
       startDate TEXT NOT NULL,
       endDate TEXT NOT NULL,
       coverPhotos TEXT NOT NULL DEFAULT '{}',
+      dailyBulletins TEXT NOT NULL DEFAULT '{}',
       createdAt INTEGER NOT NULL
     );
 
@@ -116,6 +117,22 @@ async function createTables(conn: SQLiteDBConnection): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_sync_pending ON _sync_changes(synced, timestamp);
   `);
+
+  // #95: additive column migrations for existing installs. Fresh installs
+  // already get these columns from the CREATE TABLE above — this catches
+  // users who installed the app before the column existed. SQLite raises
+  // "duplicate column name" when the column is already present, which is
+  // fine: we just swallow the error and move on.
+  const additiveColumns: Array<{ table: string; column: string; ddl: string }> = [
+    { table: 'cruises', column: 'dailyBulletins', ddl: `ALTER TABLE cruises ADD COLUMN dailyBulletins TEXT NOT NULL DEFAULT '{}'` },
+  ];
+  for (const { ddl } of additiveColumns) {
+    try {
+      await conn.execute(ddl);
+    } catch {
+      // Column already exists — safe to ignore.
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +166,9 @@ function rowToCruise(row: Record<string, unknown>): Cruise {
     startDate: row.startDate as string,
     endDate: row.endDate as string,
     coverPhotos: JSON.parse((row.coverPhotos as string) || '{}'),
+    // #95: may be undefined on rows from older installs where the
+    // defensive ALTER hasn't run yet — JSON.parse('{}') keeps it safe.
+    dailyBulletins: JSON.parse((row.dailyBulletins as string) || '{}'),
     createdAt: row.createdAt as number,
   };
 }
@@ -221,8 +241,17 @@ const nativeDb: PlatformDatabase = {
     const id = nanoid();
     const now = Date.now();
     await conn.run(
-      'INSERT INTO cruises (id, name, shipName, startDate, endDate, coverPhotos, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, cruise.name, cruise.shipName, cruise.startDate, cruise.endDate, JSON.stringify(cruise.coverPhotos ?? {}), now],
+      'INSERT INTO cruises (id, name, shipName, startDate, endDate, coverPhotos, dailyBulletins, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        id,
+        cruise.name,
+        cruise.shipName,
+        cruise.startDate,
+        cruise.endDate,
+        JSON.stringify(cruise.coverPhotos ?? {}),
+        JSON.stringify(cruise.dailyBulletins ?? {}),
+        now,
+      ],
     );
     await trackChange('cruises', id, 'insert');
     notify();
@@ -238,6 +267,7 @@ const nativeDb: PlatformDatabase = {
     if (changes.startDate !== undefined) { sets.push('startDate = ?'); vals.push(changes.startDate); }
     if (changes.endDate !== undefined) { sets.push('endDate = ?'); vals.push(changes.endDate); }
     if (changes.coverPhotos !== undefined) { sets.push('coverPhotos = ?'); vals.push(JSON.stringify(changes.coverPhotos)); }
+    if (changes.dailyBulletins !== undefined) { sets.push('dailyBulletins = ?'); vals.push(JSON.stringify(changes.dailyBulletins)); }
     if (sets.length === 0) return;
     vals.push(id);
     await conn.run(`UPDATE cruises SET ${sets.join(', ')} WHERE id = ?`, vals);
@@ -467,8 +497,19 @@ const nativeDb: PlatformDatabase = {
     await conn.execute('DELETE FROM events; DELETE FROM members; DELETE FROM cruises;');
     for (const c of data.cruises) {
       await conn.run(
-        'INSERT INTO cruises (id, name, shipName, startDate, endDate, coverPhotos, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [c.id, c.name, c.shipName, c.startDate, c.endDate, JSON.stringify(c.coverPhotos), c.createdAt],
+        'INSERT INTO cruises (id, name, shipName, startDate, endDate, coverPhotos, dailyBulletins, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          c.id,
+          c.name,
+          c.shipName,
+          c.startDate,
+          c.endDate,
+          JSON.stringify(c.coverPhotos ?? {}),
+          // #95: restore daily bulletins round-trip. Legacy backups that
+          // predate this field deserialize as `{}`.
+          JSON.stringify(c.dailyBulletins ?? {}),
+          c.createdAt,
+        ],
       );
     }
     for (const m of data.members) {
@@ -744,8 +785,18 @@ const nativeMigration: PlatformMigration = {
     for (const cruise of cruises) {
       const conn = await getDb();
       await conn.run(
-        'INSERT OR REPLACE INTO cruises (id, name, shipName, startDate, endDate, coverPhotos, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [cruise.id, cruise.name, cruise.shipName, cruise.startDate, cruise.endDate, JSON.stringify(cruise.coverPhotos), cruise.createdAt],
+        'INSERT OR REPLACE INTO cruises (id, name, shipName, startDate, endDate, coverPhotos, dailyBulletins, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          cruise.id,
+          cruise.name,
+          cruise.shipName,
+          cruise.startDate,
+          cruise.endDate,
+          JSON.stringify(cruise.coverPhotos ?? {}),
+          // #95: carry daily bulletins across the web→native migration.
+          JSON.stringify(cruise.dailyBulletins ?? {}),
+          cruise.createdAt,
+        ],
       );
       migrated++;
       onProgress(30 + Math.floor((migrated / total) * 50));

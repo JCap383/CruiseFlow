@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X, Pencil, Check, Download, Star } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Pencil, Check, Download, Star, Plus } from 'lucide-react';
 import type { EventPhoto } from '@/types';
 
 interface PhotoLightboxProps {
@@ -21,6 +21,21 @@ interface PhotoLightboxProps {
    * the action.
    */
   currentCoverDataUrl?: string;
+  /**
+   * #95: optional per-photo labels rendered in the caption strip below the
+   * image (e.g. "Day 3 · Tuesday · Front", "Day 3 · Tuesday · Back").
+   * When provided, labels take precedence over the caption editor — the
+   * lightbox switches to a read-only page-label footer because bulletin
+   * photos aren't user-captioned.
+   */
+  pageLabels?: string[];
+  /**
+   * #95: optional "add event from this view" action. When provided, the
+   * lightbox shows a `+` button in the top toolbar; tapping it closes the
+   * lightbox and fires the callback so the host can navigate to the
+   * event-create flow with the day pre-selected.
+   */
+  onAddToSchedule?: () => void;
 }
 
 export function PhotoLightbox({
@@ -30,6 +45,8 @@ export function PhotoLightbox({
   onUpdateCaption,
   onSetCover,
   currentCoverDataUrl,
+  pageLabels,
+  onAddToSchedule,
 }: PhotoLightboxProps) {
   const [index, setIndex] = useState(initialIndex);
   const [editingCaption, setEditingCaption] = useState(false);
@@ -150,6 +167,19 @@ export function PhotoLightbox({
     >
       {/* Top buttons */}
       <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-4 z-10 flex items-center gap-2">
+        {onAddToSchedule && (
+          // #95: "add event from this bulletin view" handoff. Closing the
+          // lightbox is the host's responsibility — the callback is free
+          // to navigate away.
+          <button
+            onClick={onAddToSchedule}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 text-white active:bg-white/20 transition-colors"
+            aria-label="Add event for this day"
+            title="Add event for this day"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        )}
         {onSetCover && (
           // #94: surface "Set as cover" inside the full-screen viewer so the
           // photo grid can stay clean. When this photo is *already* the
@@ -231,7 +261,14 @@ export function PhotoLightbox({
 
         {/* Caption area */}
         <div className="mt-3 flex items-center gap-2 min-h-[2rem]">
-          {editingCaption ? (
+          {pageLabels ? (
+            // #95: bulletin mode — render the page label (e.g. "Day 3 ·
+            // Tuesday · Front") read-only. Bulletin photos aren't
+            // captioned, so the caption editor is hidden entirely.
+            <span className="text-white/80 text-sm">
+              {pageLabels[index] ?? ''}
+            </span>
+          ) : editingCaption ? (
             <>
               <input
                 ref={captionInputRef}

@@ -38,7 +38,16 @@ const webDb: PlatformDatabase = {
 
   async createCruise(cruise) {
     const id = nanoid();
-    await db.cruises.add({ ...cruise, id, coverPhotos: cruise.coverPhotos ?? {}, createdAt: Date.now() });
+    await db.cruises.add({
+      ...cruise,
+      id,
+      coverPhotos: cruise.coverPhotos ?? {},
+      // #95: daily-bulletin map lives on the Cruise record so bulletins
+      // can exist on days with zero events logged. Default to an empty
+      // object so downstream code can always use optional-chain reads.
+      dailyBulletins: cruise.dailyBulletins ?? {},
+      createdAt: Date.now(),
+    });
     notify();
     return id;
   },

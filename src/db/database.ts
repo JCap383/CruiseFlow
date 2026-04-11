@@ -68,4 +68,18 @@ db.version(5).stores({
   });
 });
 
+// v6 (#95): add dailyBulletins map to cruises. Backfill with an empty
+// object so downstream code can safely do `cruise.dailyBulletins?.[date]`
+// without worrying about undefined vs. empty map.
+db.version(6).stores({
+  cruises: 'id, startDate',
+  members: 'id, cruiseId',
+  events: 'id, cruiseId, date, startTime, [cruiseId+date]',
+  venues: 'id, shipName, deck, category, [shipName+category]',
+}).upgrade(async (tx) => {
+  await tx.table('cruises').toCollection().modify((cruise: Record<string, unknown>) => {
+    if (!cruise.dailyBulletins) cruise.dailyBulletins = {};
+  });
+});
+
 export { db };
