@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import {
   Camera, Clock, MapPin, Star, Filter, Image as ImageIcon, FileText,
   Anchor, Share2, FileDown, Navigation, Plus, X, Check, Ship, Play,
+  ArrowDownWideNarrow, ArrowUpWideNarrow,
 } from 'lucide-react';
 import { useAllCruiseEvents, addEvent, updateEvent } from '@/hooks/useEvents';
 import { useFamily } from '@/hooks/useFamily';
@@ -97,6 +98,9 @@ export function Memories() {
   const qmFileRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [showEmptyDays, setShowEmptyDays] = useState(false);
+  // Sort order for the memory list. Defaults to "newest" so users land on
+  // their most recent memories first (issue #58).
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [storyState, setStoryState] = useState<{
     dayIndex: number;
     photoIndex: number;
@@ -196,13 +200,17 @@ export function Memories() {
       }
     }
 
-    // Sort: newest cruise first (by createdAt), then by date within cruise
+    // Sort: newest cruise first (by createdAt), then by date within cruise.
+    // The date direction is controlled by `sortOrder` so users can see their
+    // most recent memories on top or start at day 1 of their trip (issue #58).
     buckets.sort((a, b) => {
       const cA = cruiseById.get(a.cruiseId);
       const cB = cruiseById.get(b.cruiseId);
       const createdDiff = (cB?.createdAt ?? 0) - (cA?.createdAt ?? 0);
       if (createdDiff !== 0) return createdDiff;
-      return a.date.localeCompare(b.date);
+      return sortOrder === 'newest'
+        ? b.date.localeCompare(a.date)
+        : a.date.localeCompare(b.date);
     });
 
     return buckets.map(({ cruiseId, date, events: dayEvents }) => {
@@ -234,7 +242,7 @@ export function Memories() {
           bucketCruise?.coverPhotos?.[date] ?? dayPhotos[0]?.dataUrl ?? null,
       };
     });
-  }, [filteredEvents, cruise, showEmptyDays, cruiseById, isAllCruises]);
+  }, [filteredEvents, cruise, showEmptyDays, cruiseById, isAllCruises, sortOrder]);
 
   // Build story data: only days that actually have photos, flattened to
   // (photo, event) pairs so each photo is its own story "page".
@@ -621,7 +629,69 @@ export function Memories() {
 
       {/* Filters */}
       {showFilters && (
-        <div className="px-4 mt-4 flex flex-col gap-2 animate-fade-slide-up">
+        <div className="px-4 mt-4 flex flex-col gap-3 animate-fade-slide-up">
+          {/* Sort order — issue #58 */}
+          <div>
+            <Text
+              variant="caption"
+              weight="semibold"
+              tone="accent"
+              className="uppercase tracking-wider block mb-1.5"
+            >
+              Sort
+            </Text>
+            <div
+              className="inline-flex rounded-full p-0.5"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-default)',
+              }}
+              role="group"
+              aria-label="Sort order"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  void haptics.tap();
+                  setSortOrder('newest');
+                }}
+                className="text-footnote px-3 py-1.5 rounded-full flex items-center gap-1 press"
+                style={{
+                  backgroundColor:
+                    sortOrder === 'newest' ? 'var(--accent)' : 'transparent',
+                  color:
+                    sortOrder === 'newest'
+                      ? 'var(--accent-fg)'
+                      : 'var(--fg-muted)',
+                }}
+                aria-pressed={sortOrder === 'newest'}
+              >
+                <ArrowDownWideNarrow className="w-3.5 h-3.5" aria-hidden="true" />
+                Newest first
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void haptics.tap();
+                  setSortOrder('oldest');
+                }}
+                className="text-footnote px-3 py-1.5 rounded-full flex items-center gap-1 press"
+                style={{
+                  backgroundColor:
+                    sortOrder === 'oldest' ? 'var(--accent)' : 'transparent',
+                  color:
+                    sortOrder === 'oldest'
+                      ? 'var(--accent-fg)'
+                      : 'var(--fg-muted)',
+                }}
+                aria-pressed={sortOrder === 'oldest'}
+              >
+                <ArrowUpWideNarrow className="w-3.5 h-3.5" aria-hidden="true" />
+                Oldest first
+              </button>
+            </div>
+          </div>
+
           {members.length > 0 && (
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
               <button
