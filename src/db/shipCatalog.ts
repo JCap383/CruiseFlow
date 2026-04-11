@@ -89,14 +89,76 @@ export function getAllShipNames(): string[] {
   return getAllShips().map((s) => s.name);
 }
 
-/** Find a ship by its canonical name or alias (case-insensitive). */
+/**
+ * Find a ship by its canonical name, alias, or a distinctive fragment
+ * (case-insensitive).
+ *
+ * Resolution order:
+ *   1. Exact canonical match  — "NCL Prima" → NCL Prima
+ *   2. Exact alias match      — "Norwegian Prima" → NCL Prima
+ *   3. Token-subsequence match — "Prima" → NCL Prima, provided the
+ *      fragment uniquely identifies one ship in the catalog.
+ *
+ * Step 3 exists to heal legacy cruises created before the ShipPicker
+ * shipped, where users stored short free-text names like "Prima" or
+ * "Breakaway" in `cruise.shipName`. Without it, a backup restored from
+ * that era shows no venues, no cruise-line badge, and no ship metadata
+ * because every downstream consumer goes through this function.
+ *
+ * The token match deliberately requires a *unique* hit — ambiguous
+ * fragments like "Norwegian" (matches every NCL ship) or "of the Seas"
+ * (matches every Royal Caribbean ship) return undefined rather than
+ * silently picking an arbitrary one.
+ */
 export function findShip(name: string): Ship | undefined {
   if (!name) return undefined;
   const needle = name.trim().toLowerCase();
-  for (const ship of getAllShips()) {
+  if (!needle) return undefined;
+
+  const ships = getAllShips();
+
+  // 1. Exact canonical match.
+  for (const ship of ships) {
     if (ship.name.toLowerCase() === needle) return ship;
+  }
+
+  // 2. Exact alias match.
+  for (const ship of ships) {
     if (ship.aliases?.some((a) => a.toLowerCase() === needle)) return ship;
   }
+
+  // 3. Distinctive-fragment match. Tokenize both sides and check for a
+  //    contiguous token subsequence, then only return if exactly one
+  //    ship matches.
+  const tokenize = (s: string): string[] =>
+    s
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 0);
+
+  const needleTokens = tokenize(needle);
+  if (needleTokens.length === 0) return undefined;
+
+  const containsSubseq = (hay: string[], need: string[]): boolean => {
+    if (need.length === 0 || need.length > hay.length) return false;
+    outer: for (let i = 0; i <= hay.length - need.length; i++) {
+      for (let j = 0; j < need.length; j++) {
+        if (hay[i + j] !== need[j]) continue outer;
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const fragmentHits: Ship[] = [];
+  for (const ship of ships) {
+    const candidates = [tokenize(ship.name), ...(ship.aliases?.map(tokenize) ?? [])];
+    if (candidates.some((tok) => containsSubseq(tok, needleTokens))) {
+      fragmentHits.push(ship);
+    }
+  }
+  if (fragmentHits.length === 1) return fragmentHits[0];
+
   return undefined;
 }
 
