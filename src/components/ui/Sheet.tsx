@@ -15,24 +15,41 @@ interface SheetProps {
 export function Sheet({ open, onClose, title, children, maxHeight = 0.88, ariaLabel }: SheetProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  // Keep the latest onClose in a ref so the Escape-key effect doesn't re-run
+  // (and re-focus the dialog root) whenever the parent passes a fresh inline
+  // callback on every render — that's what was stealing focus from inputs
+  // inside the sheet on every keystroke (issue #62).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  // Focus the dialog, lock body scroll, and restore focus on close. This
+  // runs only when `open` flips, never on every parent re-render.
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
     dialogRef.current?.focus();
     document.body.style.overflow = 'hidden';
     return () => {
-      window.removeEventListener('keydown', handleKey);
       document.body.style.overflow = '';
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
+
+  // Bind the Escape key listener separately so the focus effect above isn't
+  // tied to onClose's identity.
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [open]);
 
   if (!open) return null;
 
