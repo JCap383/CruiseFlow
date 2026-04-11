@@ -7,6 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { db } from '@/db/database';
+import { findShip } from '@/db/shipCatalog';
 import type { Platform, PlatformDatabase, PlatformPhotos, PlatformSync, SyncStatus } from './types';
 
 // ---------------------------------------------------------------------------
@@ -146,7 +147,28 @@ const webDb: PlatformDatabase = {
 
   async getVenuesForShip(shipName) {
     if (!shipName) return db.venues.toArray();
-    return db.venues.where('shipName').equals(shipName).toArray();
+    // Try the literal shipName first. This handles the common case where
+    // the cruise's shipName already matches the canonical name in the
+    // seeded catalog ("NCL Prima", "Oasis of the Seas", etc.).
+    const direct = await db.venues
+      .where('shipName')
+      .equals(shipName)
+      .toArray();
+    if (direct.length > 0) return direct;
+    // Fall back to alias resolution. Existing cruises created before the
+    // ship catalog / ShipPicker landed (commit a35da69) may have stored
+    // "Norwegian Prima" as free text — the catalog now treats that as an
+    // alias of "NCL Prima", so look up the canonical name and retry before
+    // giving up. Without this fallback, Prima users see an empty venue list
+    // even when the v2 catalog is correctly seeded.
+    const canonical = findShip(shipName);
+    if (canonical && canonical.name !== shipName) {
+      return db.venues
+        .where('shipName')
+        .equals(canonical.name)
+        .toArray();
+    }
+    return [];
   },
 
   // -- Backup / restore ------------------------------------------------------

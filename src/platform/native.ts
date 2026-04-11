@@ -14,6 +14,7 @@ import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacito
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Preferences } from '@capacitor/preferences';
+import { findShip } from '@/db/shipCatalog';
 import type { Cruise, CruiseEvent, FamilyMember, EventPhoto, Venue } from '@/types';
 import type {
   Platform,
@@ -425,8 +426,24 @@ const nativeDb: PlatformDatabase = {
       const result = await conn.query('SELECT * FROM venues ORDER BY name');
       return (result.values || []).map(rowToVenue);
     }
-    const result = await conn.query('SELECT * FROM venues WHERE shipName = ? ORDER BY name', [shipName]);
-    return (result.values || []).map(rowToVenue);
+    // Try the literal shipName first (canonical case).
+    const direct = await conn.query(
+      'SELECT * FROM venues WHERE shipName = ? ORDER BY name',
+      [shipName],
+    );
+    const directRows = (direct.values || []).map(rowToVenue);
+    if (directRows.length > 0) return directRows;
+    // Fall back to alias resolution via the ship catalog so legacy cruises
+    // stored as "Norwegian Prima" still surface "NCL Prima" venues.
+    const canonical = findShip(shipName);
+    if (canonical && canonical.name !== shipName) {
+      const aliased = await conn.query(
+        'SELECT * FROM venues WHERE shipName = ? ORDER BY name',
+        [canonical.name],
+      );
+      return (aliased.values || []).map(rowToVenue);
+    }
+    return [];
   },
 
   // -- Backup / restore ------------------------------------------------------

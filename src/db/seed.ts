@@ -285,6 +285,52 @@ async function writeAllVenues(): Promise<void> {
   await db.venues.bulkAdd(venues);
 }
 
+/**
+ * Count of venues we expect to find in IndexedDB for each canonical ship,
+ * derived at module load from the bundled static catalog. Used as an
+ * integrity tripwire by `seedVenues()` — if the persisted venue count
+ * drifts below what the bundle ships, we force a re-seed even if the
+ * localStorage version key says we're up to date.
+ */
+function expectedVenueCountForShip(shipName: string): number {
+  const norm = normalizeShipName(shipName);
+  // Canonical lookup first; then alias lookup through the catalog.
+  const direct = SHIP_VENUES[norm];
+  if (direct) return direct.length;
+  const canonical = findShip(shipName);
+  if (canonical) {
+    const canonicalKey = normalizeShipName(canonical.name);
+    return SHIP_VENUES[canonicalKey]?.length ?? 0;
+  }
+  return 0;
+}
+
+/**
+ * Returns true if the persisted venue count for *any* known ship is lower
+ * than what the bundle ships. This catches the case where a user's
+ * localStorage got wiped (private mode, Safari eviction, "Clear site data")
+ * but IndexedDB still holds a stale catalog — the version-key check alone
+ * would incorrectly conclude "we're already at v2" and skip the migration.
+ */
+async function isVenueCatalogStale(): Promise<boolean> {
+  // Only check ships we actually have seed data for. The canonical keys in
+  // SHIP_VENUES correspond to unique display names after the alias dedup in
+  // writeAllVenues().
+  const checks: Array<[string, number]> = [
+    ['NCL Prima', expectedVenueCountForShip('NCL Prima')],
+    ['Oasis of the Seas', expectedVenueCountForShip('Oasis of the Seas')],
+  ];
+  for (const [name, expected] of checks) {
+    if (expected === 0) continue;
+    const persisted = await db.venues
+      .where('shipName')
+      .equals(name)
+      .count();
+    if (persisted < expected) return true;
+  }
+  return false;
+}
+
 export async function seedVenues() {
   const count = await db.venues.count();
   const storedVersion = getStoredSeedVersion();
@@ -296,10 +342,25 @@ export async function seedVenues() {
     return;
   }
 
+  // Version-key migration path: the normal happy-path upgrade from an
+  // older catalog to the current version.
   if (storedVersion < VENUE_SEED_VERSION) {
     // Existing user on an older catalog — wipe and re-seed so they pick up
     // the refreshed data. User-created venues live on the cruise itself,
     // not in the venue table, so this is safe.
+    await db.venues.clear();
+    await writeAllVenues();
+    setStoredSeedVersion(VENUE_SEED_VERSION);
+    return;
+  }
+
+  // Integrity self-heal: even if the stored version says we're up to
+  // date, verify that the persisted venue counts still match what the
+  // bundle ships. This handles the case where localStorage got cleared
+  // (private mode, Safari 7-day eviction, "Clear site data") after the
+  // catalog was first seeded but IndexedDB kept its stale rows — the
+  // version-key check would otherwise falsely conclude "already current".
+  if (await isVenueCatalogStale()) {
     await db.venues.clear();
     await writeAllVenues();
     setStoredSeedVersion(VENUE_SEED_VERSION);
