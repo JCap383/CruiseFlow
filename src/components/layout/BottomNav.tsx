@@ -1,10 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { CalendarDays, BookOpen, Users, Settings } from 'lucide-react';
+import { CalendarDays, BookOpen, Ship, Users, Settings } from 'lucide-react';
 import { haptics } from '@/utils/haptics';
 
 const tabs = [
   { to: '/', icon: CalendarDays, label: 'Schedule', end: true },
   { to: '/memories', icon: BookOpen, label: 'Memories', end: false },
+  { to: '/ship', icon: Ship, label: 'Ship', end: false },
   { to: '/family', icon: Users, label: 'Family', end: false },
   { to: '/settings', icon: Settings, label: 'Settings', end: false },
 ];
