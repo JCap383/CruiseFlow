@@ -6,69 +6,115 @@ import { getAllShipNames, findShip } from './shipCatalog';
 type VenueEntry = Omit<Venue, 'id'>;
 
 // ── NCL Prima ─────────────────────────────────────────────────────────
+//
+// Comprehensive venue catalog cross-referenced from NCL.com, CruiseMapper
+// (deck-by-deck plans), eatsleepcruise.com, and cruisecritic.com. Decks are
+// the official ones used in NCL's published deck plans.
 const NCL_PRIMA: Omit<VenueEntry, 'shipName'>[] = [
-  // Dining — Complimentary
-  { name: 'Hudson\'s', deck: 7, category: 'dining', isDefault: true },
+  // ── Dining — Complimentary main dining ────────────────────────────
+  { name: "Hudson's", deck: 7, category: 'dining', isDefault: true },
   { name: 'The Commodore Room', deck: 6, category: 'dining', isDefault: true },
+  { name: 'The Haven Restaurant', deck: 17, category: 'dining', isDefault: true },
+  // ── Dining — Casual / complimentary ───────────────────────────────
   { name: 'Surfside Cafe & Grill', deck: 17, category: 'dining', isDefault: true },
   { name: 'The Local Bar & Grill', deck: 8, category: 'dining', isDefault: true },
+  { name: 'The Local on Ocean Boulevard', deck: 8, category: 'dining', isDefault: true },
   { name: 'Indulge Food Hall', deck: 8, category: 'dining', isDefault: true },
-  { name: 'The Great Outdoors', deck: 17, category: 'dining', isDefault: true },
-  // Dining — Specialty
-  { name: 'Onda by Scarpetta', deck: 8, category: 'dining', isDefault: true },
-  { name: 'Palomar', deck: 17, category: 'dining', isDefault: true },
-  { name: 'Los Lobos', deck: 8, category: 'dining', isDefault: true },
-  { name: 'Food Republic', deck: 17, category: 'dining', isDefault: true },
-  { name: 'Hasuki', deck: 7, category: 'dining', isDefault: true },
-  { name: 'Le Bistro', deck: 7, category: 'dining', isDefault: true },
-  { name: 'Cagney\'s Steakhouse', deck: 6, category: 'dining', isDefault: true },
+  // Indulge Food Hall stations (each is its own walk-up counter)
+  { name: 'Garden Kitchen', deck: 8, category: 'dining', isDefault: true },
   { name: 'Q Texas Smokehouse', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Tamara', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Latin Quarter', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Nudls', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Seaside Rotisserie', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Tapas', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Just Desserts', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Just Ice Cream', deck: 8, category: 'dining', isDefault: true },
+  { name: "Coco's Crepes & Coffee", deck: 8, category: 'dining', isDefault: true },
+  // ── Dining — Specialty (à la carte / package) ─────────────────────
+  { name: 'Cagney\'s Steakhouse', deck: 6, category: 'dining', isDefault: true },
+  { name: 'Le Bistro', deck: 7, category: 'dining', isDefault: true },
+  { name: 'Hasuki', deck: 7, category: 'dining', isDefault: true },
   { name: 'Nama Sushi & Sashimi', deck: 7, category: 'dining', isDefault: true },
-  // Bars
+  { name: 'Onda by Scarpetta', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Los Lobos', deck: 8, category: 'dining', isDefault: true },
+  { name: 'Palomar', deck: 17, category: 'dining', isDefault: true },
+  { name: 'Food Republic', deck: 17, category: 'dining', isDefault: true },
+  // ── Dining — Coffee & quick bites ─────────────────────────────────
+  { name: 'Starbucks', deck: 7, category: 'dining', isDefault: true },
+  { name: 'Observation Lounge Cafe', deck: 15, category: 'dining', isDefault: true },
+
+  // ── Bars & Lounges ────────────────────────────────────────────────
   { name: 'Penrose Bar', deck: 6, category: 'bar', isDefault: true },
-  { name: 'Metropolitan Bar', deck: 7, category: 'bar', isDefault: true },
   { name: 'Belvedere Bar', deck: 6, category: 'bar', isDefault: true },
+  { name: 'Whiskey Bar', deck: 6, category: 'bar', isDefault: true },
+  { name: 'Metropolitan Bar', deck: 7, category: 'bar', isDefault: true },
+  { name: "Syd Norman's Pour House", deck: 7, category: 'bar', isDefault: true },
+  { name: 'Soleil Bar', deck: 8, category: 'bar', isDefault: true },
+  { name: 'Luna Bar', deck: 8, category: 'bar', isDefault: true },
+  { name: 'La Terraza', deck: 8, category: 'bar', isDefault: true },
+  { name: 'Indulge Outdoor Lounge', deck: 8, category: 'bar', isDefault: true },
+  { name: 'Observation Lounge & Bar', deck: 15, category: 'bar', isDefault: true },
   { name: 'The Haven Lounge', deck: 16, category: 'bar', isDefault: true },
   { name: 'Vibe Beach Club Bar', deck: 17, category: 'bar', isDefault: true },
   { name: 'Waves Pool Bar', deck: 17, category: 'bar', isDefault: true },
-  { name: 'The Lido Bar', deck: 16, category: 'bar', isDefault: true },
-  { name: 'Whiskey Bar', deck: 6, category: 'bar', isDefault: true },
-  { name: 'The Soleil Bar', deck: 8, category: 'bar', isDefault: true },
-  { name: 'Starbucks', deck: 7, category: 'bar', isDefault: true },
-  // Entertainment
-  { name: 'Prima Theater & Club', deck: 7, category: 'entertainment', isDefault: true },
-  { name: 'Improv at Sea', deck: 7, category: 'entertainment', isDefault: true },
-  { name: 'The Stadium', deck: 18, category: 'entertainment', isDefault: true },
-  { name: 'Casino', deck: 6, category: 'entertainment', isDefault: true },
-  { name: 'Game Gallery', deck: 6, category: 'entertainment', isDefault: true },
-  { name: 'Bull\'s Eye', deck: 18, category: 'entertainment', isDefault: true },
-  { name: 'Syd Norman\'s Pour House', deck: 7, category: 'entertainment', isDefault: true },
-  // Kids
+  { name: 'Prima Speedway Bar', deck: 18, category: 'bar', isDefault: true },
+
+  // ── Entertainment ─────────────────────────────────────────────────
+  { name: 'Prima Theater & Club', deck: 6, category: 'entertainment', isDefault: true },
+  { name: 'The Improv at Sea', deck: 7, category: 'entertainment', isDefault: true },
+  { name: 'Prima Casino', deck: 6, category: 'entertainment', isDefault: true },
+
+  // ── Kids & Teens ──────────────────────────────────────────────────
   { name: 'Splash Academy', deck: 15, category: 'kids', isDefault: true },
   { name: 'Guppies Nursery', deck: 15, category: 'kids', isDefault: true },
-  { name: 'Entourage Teen Club', deck: 15, category: 'kids', isDefault: true },
-  // Pools
+  { name: "Kids' Aqua Park", deck: 15, category: 'kids', isDefault: true },
+  { name: 'Entourage Teen Club', deck: 18, category: 'kids', isDefault: true },
+
+  // ── Pools & Whirlpools ────────────────────────────────────────────
+  { name: 'Infinity Beach (Port)', deck: 8, category: 'pool', isDefault: true },
+  { name: 'Infinity Beach (Starboard)', deck: 8, category: 'pool', isDefault: true },
+  { name: 'The Haven Pool', deck: 16, category: 'pool', isDefault: true },
   { name: 'Main Pool', deck: 17, category: 'pool', isDefault: true },
-  { name: 'Infinity Beach', deck: 8, category: 'pool', isDefault: true },
   { name: 'Vibe Beach Club', deck: 17, category: 'pool', isDefault: true },
-  { name: 'Tidal Wave Waterslide', deck: 17, category: 'pool', isDefault: true },
-  // Activities
-  { name: 'The Drop', deck: 18, category: 'activity', isDefault: true },
-  { name: 'Go-Kart Speedway', deck: 20, category: 'activity', isDefault: true },
-  { name: 'The Rush', deck: 18, category: 'activity', isDefault: true },
+  { name: 'Aqua Park Whirlpools', deck: 18, category: 'pool', isDefault: true },
+
+  // ── Activities & Sports ───────────────────────────────────────────
+  { name: 'Ocean Boulevard Walking Track', deck: 8, category: 'activity', isDefault: true },
+  { name: 'Oceanwalk Glass Bridges', deck: 8, category: 'activity', isDefault: true },
+  { name: 'The Concourse Sculpture Garden', deck: 8, category: 'activity', isDefault: true },
   { name: 'Galaxy Pavilion', deck: 17, category: 'activity', isDefault: true },
-  { name: 'Sports Court', deck: 18, category: 'activity', isDefault: true },
-  { name: 'Running Track', deck: 8, category: 'activity', isDefault: true },
-  { name: 'Mini Golf', deck: 18, category: 'activity', isDefault: true },
-  // Spa
-  { name: 'Mandara Spa', deck: 16, category: 'spa', isDefault: true },
+  { name: 'Tidal Wave Waterslide', deck: 17, category: 'activity', isDefault: true },
+  { name: 'The Wave Waterslide', deck: 18, category: 'activity', isDefault: true },
+  { name: 'Ocean Loop Waterslides', deck: 18, category: 'activity', isDefault: true },
+  { name: 'The Drop', deck: 18, category: 'activity', isDefault: true },
+  { name: 'The Rush', deck: 18, category: 'activity', isDefault: true },
+  { name: 'The Stadium', deck: 18, category: 'activity', isDefault: true },
+  { name: 'Tee Time Mini Golf', deck: 18, category: 'activity', isDefault: true },
+  { name: "The Bull's Eye", deck: 18, category: 'activity', isDefault: true },
+  { name: 'Prima Speedway (Lower)', deck: 18, category: 'activity', isDefault: true },
+  { name: 'Prima Speedway (Upper)', deck: 19, category: 'activity', isDefault: true },
+  { name: 'Speedway Viewing Deck', deck: 20, category: 'activity', isDefault: true },
+
+  // ── Spa & Fitness ─────────────────────────────────────────────────
+  { name: 'Mandara Spa & Salon', deck: 16, category: 'spa', isDefault: true },
   { name: 'Pulse Fitness Center', deck: 16, category: 'spa', isDefault: true },
   { name: 'Thermal Suite', deck: 16, category: 'spa', isDefault: true },
-  // Services
+  { name: 'Vitality Pool', deck: 16, category: 'spa', isDefault: true },
+  { name: 'Salt Room', deck: 16, category: 'spa', isDefault: true },
+  { name: 'Aerobics Studio', deck: 16, category: 'spa', isDefault: true },
+
+  // ── Services & Shopping ───────────────────────────────────────────
   { name: 'Guest Services', deck: 7, category: 'service', isDefault: true },
   { name: 'Shore Excursions', deck: 7, category: 'service', isDefault: true },
-  { name: 'Photo Gallery', deck: 8, category: 'service', isDefault: true },
-  { name: 'Shops', deck: 7, category: 'service', isDefault: true },
+  { name: 'The Gateway Shops', deck: 7, category: 'service', isDefault: true },
+  { name: 'Effy Jewelry', deck: 7, category: 'service', isDefault: true },
+  { name: 'Art Gallery', deck: 7, category: 'service', isDefault: true },
+  { name: 'I-Connect Internet Cafe', deck: 7, category: 'service', isDefault: true },
+  { name: 'Roberto Coin', deck: 6, category: 'service', isDefault: true },
+  { name: 'Pandora Jewelry', deck: 8, category: 'service', isDefault: true },
+  { name: 'Tech@Sea', deck: 8, category: 'service', isDefault: true },
+  { name: 'Perspectives Photo Studio', deck: 8, category: 'service', isDefault: true },
 ];
 
 // ── Oasis of the Seas ─────────────────────────────────────────────────
@@ -192,33 +238,77 @@ export function getKnownShips(): string[] {
   return getAllShipNames();
 }
 
+// Bump this whenever the seeded venue catalog changes so existing users
+// automatically pick up the refreshed data on next launch. The previous
+// seed produced ~53 NCL Prima venues; v2 expands that to ~85 with full
+// deck-by-deck data sourced from NCL.com and CruiseMapper.
+const VENUE_SEED_VERSION = 2;
+const VENUE_SEED_VERSION_KEY = 'cruiseflow:venuesSeedVersion';
+
+function getStoredSeedVersion(): number {
+  try {
+    const raw = localStorage.getItem(VENUE_SEED_VERSION_KEY);
+    if (!raw) return 0;
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setStoredSeedVersion(v: number): void {
+  try {
+    localStorage.setItem(VENUE_SEED_VERSION_KEY, String(v));
+  } catch {
+    // Storage may be unavailable (private mode, etc.) — best-effort only.
+  }
+}
+
+async function writeAllVenues(): Promise<void> {
+  const allVenues: (Omit<VenueEntry, 'shipName'> & { shipName: string })[] = [];
+  for (const [key, venues] of Object.entries(SHIP_VENUES)) {
+    // Use the canonical display name
+    const displayName = key === 'ncl prima' ? 'NCL Prima'
+      : key === 'norwegian prima' ? 'NCL Prima'
+      : key === 'oasis of the seas' ? 'Oasis of the Seas'
+      : key;
+    // Skip duplicates (norwegian prima = ncl prima)
+    if (key === 'norwegian prima') continue;
+    for (const v of venues) {
+      allVenues.push({ ...v, shipName: displayName });
+    }
+  }
+  const venues = allVenues.map((v, i) => ({
+    ...v,
+    id: `venue-${i}`,
+  }));
+  await db.venues.bulkAdd(venues);
+}
+
 export async function seedVenues() {
   const count = await db.venues.count();
+  const storedVersion = getStoredSeedVersion();
+
   if (count === 0) {
-    // Seed all ships
-    const allVenues: (Omit<VenueEntry, 'shipName'> & { shipName: string })[] = [];
-    for (const [key, venues] of Object.entries(SHIP_VENUES)) {
-      // Use the canonical display name
-      const displayName = key === 'ncl prima' ? 'NCL Prima'
-        : key === 'norwegian prima' ? 'NCL Prima'
-        : key === 'oasis of the seas' ? 'Oasis of the Seas'
-        : key;
-      // Skip duplicates (norwegian prima = ncl prima)
-      if (key === 'norwegian prima') continue;
-      for (const v of venues) {
-        allVenues.push({ ...v, shipName: displayName });
-      }
-    }
-    const venues = allVenues.map((v, i) => ({
-      ...v,
-      id: `venue-${i}`,
-    }));
-    await db.venues.bulkAdd(venues);
+    // Fresh install — seed everything.
+    await writeAllVenues();
+    setStoredSeedVersion(VENUE_SEED_VERSION);
+    return;
+  }
+
+  if (storedVersion < VENUE_SEED_VERSION) {
+    // Existing user on an older catalog — wipe and re-seed so they pick up
+    // the refreshed data. User-created venues live on the cruise itself,
+    // not in the venue table, so this is safe.
+    await db.venues.clear();
+    await writeAllVenues();
+    setStoredSeedVersion(VENUE_SEED_VERSION);
   }
 }
 
 // Force re-seed (used when upgrading venue data)
 export async function reseedVenues() {
   await db.venues.clear();
-  await seedVenues();
+  await writeAllVenues();
+  setStoredSeedVersion(VENUE_SEED_VERSION);
 }
