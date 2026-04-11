@@ -9,6 +9,7 @@ import { EventDetail } from '@/pages/EventDetail';
 import { Onboarding } from '@/pages/Onboarding';
 import { Concierge } from '@/pages/Concierge';
 import { Memories } from '@/pages/Memories';
+import { ShipInfo } from '@/pages/ShipInfo';
 
 const routes = [
   {
@@ -24,6 +25,7 @@ const routes = [
     children: [
       { path: '/', element: <DailySchedule /> },
       { path: '/memories', element: <Memories /> },
+      { path: '/ship', element: <ShipInfo /> },
       { path: '/family', element: <FamilyDashboard /> },
       { path: '/settings', element: <Settings /> },
       { path: '/event/new', element: <AddEditEvent /> },
