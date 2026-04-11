@@ -928,7 +928,20 @@ export function Memories() {
 
                         {photos.length > 0 && (
                           <div className="grid grid-cols-3 gap-1.5 mt-2">
-                            {photos.map((photo, photoIdx) => (
+                            {photos.map((photo, photoIdx) => {
+                              // #93: only the *current* cover photo for this
+                              // day should advertise itself as "Cover". The
+                              // previous markup labelled every photo "Cover"
+                              // because the chip was an action label, not a
+                              // status — confusing because it looked like an
+                              // assertion that every photo was the cover.
+                              // Now: the active cover renders a filled-star
+                              // "Cover" badge and other photos render a
+                              // smaller outlined "Set cover" button.
+                              const bucketCruise = cruiseById.get(bucketCruiseId);
+                              const dayCover = bucketCruise?.coverPhotos?.[event.date];
+                              const isCover = dayCover === photo.dataUrl;
+                              return (
                               <div key={photo.id} className="relative">
                                 <button
                                   type="button"
@@ -946,34 +959,51 @@ export function Memories() {
                                     className="w-full h-full object-cover"
                                   />
                                 </button>
-                                {/* #75: Cover button is always visible — the
-                                    old hover-only state was unreachable on
-                                    touch devices. */}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSetCoverPhoto(
-                                      bucketCruiseId,
-                                      event.date,
-                                      photo.dataUrl,
-                                    )
-                                  }
-                                  className="absolute bottom-1 left-1 text-caption px-1.5 py-0.5 rounded press"
-                                  style={{
-                                    backgroundColor: 'rgba(0,0,0,0.6)',
-                                    color: 'rgba(255,255,255,0.92)',
-                                  }}
-                                  aria-label="Set as cover photo"
-                                >
-                                  Cover
-                                </button>
+                                {isCover ? (
+                                  <div
+                                    className="absolute bottom-1 left-1 text-caption px-1.5 py-0.5 rounded flex items-center gap-1 pointer-events-none"
+                                    style={{
+                                      backgroundColor: 'var(--accent)',
+                                      color: 'var(--accent-fg)',
+                                    }}
+                                    aria-label="This photo is the day's cover"
+                                  >
+                                    <Star
+                                      className="w-3 h-3"
+                                      style={{ fill: 'currentColor' }}
+                                      aria-hidden="true"
+                                    />
+                                    Cover
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleSetCoverPhoto(
+                                        bucketCruiseId,
+                                        event.date,
+                                        photo.dataUrl,
+                                      )
+                                    }
+                                    className="absolute bottom-1 left-1 text-caption px-1.5 py-0.5 rounded flex items-center gap-1 press"
+                                    style={{
+                                      backgroundColor: 'rgba(0,0,0,0.6)',
+                                      color: 'rgba(255,255,255,0.92)',
+                                    }}
+                                    aria-label="Set as cover photo"
+                                  >
+                                    <Star className="w-3 h-3" aria-hidden="true" />
+                                    Set cover
+                                  </button>
+                                )}
                                 {photo.caption && (
                                   <div className="absolute bottom-0 left-0 right-0 px-1.5 py-0.5 pointer-events-none" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                                     <p className="text-caption truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>{photo.caption}</p>
                                   </div>
                                 )}
                               </div>
-                            ))}
+                            );
+                          })}
                           </div>
                         )}
                       </div>
