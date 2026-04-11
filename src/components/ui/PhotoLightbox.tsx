@@ -51,21 +51,47 @@ export function PhotoLightbox({
   const [index, setIndex] = useState(initialIndex);
   const [editingCaption, setEditingCaption] = useState(false);
   const [captionText, setCaptionText] = useState('');
-  const touchStartX = useRef<number | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const captionInputRef = useRef<HTMLInputElement>(null);
 
+  // Pinch-to-zoom + pan state. `scale` / `offset` drive the img transform;
+  // the refs mirror the latest values so the native touchmove listener
+  // (which closes over stale state otherwise) can read them in real time.
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isGesturing, setIsGesturing] = useState(false);
+  const scaleRef = useRef(1);
+  const offsetRef = useRef({ x: 0, y: 0 });
+  const imgWrapRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const lastTapRef = useRef(0);
+
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
+
   const photo = photos[index];
+
+  // Reset zoom on navigate so the next photo always opens at 1x.
+  const resetZoom = useCallback(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  }, []);
 
   const goPrev = useCallback(() => {
     setIndex((i) => (i > 0 ? i - 1 : i));
     setEditingCaption(false);
-  }, []);
+    resetZoom();
+  }, [resetZoom]);
 
   const goNext = useCallback(() => {
     setIndex((i) => (i < photos.length - 1 ? i + 1 : i));
     setEditingCaption(false);
-  }, [photos.length]);
+    resetZoom();
+  }, [photos.length, resetZoom]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -87,20 +113,171 @@ export function PhotoLightbox({
     };
   }, []);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0]?.clientX ?? null;
+  // Native touch handlers for pinch-zoom + pan + swipe nav. We use
+  // addEventListener with `{ passive: false }` so `preventDefault()` can
+  // actually cancel the browser's default pan/zoom when we're handling a
+  // gesture. React's synthetic touch events are always passive as of
+  // React 17+, which is why we can't use onTouchMove here.
+  useEffect(() => {
+    const el = imgWrapRef.current;
+    if (!el) return;
+
+    const getDistance = (t1: Touch, t2: Touch) =>
+      Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+    // Constrain offset so the image can't drift past the edges when
+    // zoomed. Called after every pan/pinch update.
+    const clamp = (o: { x: number; y: number }, s: number) => {
+      const imgEl = imgRef.current;
+      if (!imgEl || s <= 1) return { x: 0, y: 0 };
+      const rect = imgEl.getBoundingClientRect();
+      // rect already reflects the current scaled size (transform is
+      // applied), so subtract the natural "1x" size to get slack.
+      const slackX = Math.max(0, (rect.width - rect.width / s) / 2);
+      const slackY = Math.max(0, (rect.height - rect.height / s) / 2);
+      return {
+        x: Math.max(-slackX, Math.min(slackX, o.x)),
+        y: Math.max(-slackY, Math.min(slackY, o.y)),
+      };
+    };
+
+    let pinch: {
+      startDist: number;
+      startScale: number;
+      startOffset: { x: number; y: number };
+    } | null = null;
+    let pan: {
+      startX: number;
+      startY: number;
+      startOffset: { x: number; y: number };
+    } | null = null;
+    let swipeStartX: number | null = null;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (editingCaption) return;
+      if (e.touches.length === 2) {
+        // Two fingers down → start pinch. Capture initial distance +
+        // current scale/offset so we can interpolate from there.
+        pinch = {
+          startDist: getDistance(e.touches[0]!, e.touches[1]!),
+          startScale: scaleRef.current,
+          startOffset: { ...offsetRef.current },
+        };
+        pan = null;
+        swipeStartX = null;
+        setIsGesturing(true);
+      } else if (e.touches.length === 1) {
+        const t = e.touches[0]!;
+        if (scaleRef.current > 1) {
+          // Zoomed in → single-finger drag pans the image instead of
+          // navigating to the next photo.
+          pan = {
+            startX: t.clientX,
+            startY: t.clientY,
+            startOffset: { ...offsetRef.current },
+          };
+          swipeStartX = null;
+          setIsGesturing(true);
+        } else {
+          // At 1x, a single finger starts a swipe for photo navigation.
+          swipeStartX = t.clientX;
+          pan = null;
+        }
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinch) {
+        e.preventDefault();
+        const dist = getDistance(e.touches[0]!, e.touches[1]!);
+        const ratio = dist / pinch.startDist;
+        const nextScale = Math.max(1, Math.min(4, pinch.startScale * ratio));
+        setScale(nextScale);
+        // Keep offset reasonable as the user zooms out back toward 1x.
+        setOffset(clamp(pinch.startOffset, nextScale));
+      } else if (e.touches.length === 1 && pan) {
+        e.preventDefault();
+        const t = e.touches[0]!;
+        const raw = {
+          x: pan.startOffset.x + (t.clientX - pan.startX),
+          y: pan.startOffset.y + (t.clientY - pan.startY),
+        };
+        setOffset(clamp(raw, scaleRef.current));
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (pinch && e.touches.length < 2) {
+        pinch = null;
+        // Snap back to 1x if the user almost fully zoomed out — avoids
+        // the awkward "0.99x with tiny pan offset" state.
+        if (scaleRef.current <= 1.02) {
+          setScale(1);
+          setOffset({ x: 0, y: 0 });
+        }
+      }
+      if (pan && e.touches.length === 0) {
+        pan = null;
+      }
+      if (
+        swipeStartX !== null &&
+        e.touches.length === 0 &&
+        scaleRef.current === 1
+      ) {
+        const endX = e.changedTouches[0]?.clientX;
+        if (endX !== undefined) {
+          const diff = endX - swipeStartX;
+          if (Math.abs(diff) > 50) {
+            if (diff > 0) goPrev();
+            else goNext();
+          }
+        }
+        swipeStartX = null;
+      }
+      if (e.touches.length === 0) {
+        setIsGesturing(false);
+      }
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [editingCaption, goPrev, goNext]);
+
+  // Double-tap / double-click toggles between 1x and 2.5x. On touch
+  // devices this runs after the synthetic click fires at touch-end.
+  const handleImageTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      if (scaleRef.current > 1) {
+        setScale(1);
+        setOffset({ x: 0, y: 0 });
+      } else {
+        setScale(2.5);
+      }
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+    }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const endX = e.changedTouches[0]?.clientX;
-    if (endX === undefined) return;
-    const diff = endX - touchStartX.current;
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) goPrev();
-      else goNext();
-    }
-    touchStartX.current = null;
+  // Desktop: Ctrl/Cmd + wheel zoom. Plain wheel is ignored so users can
+  // still scroll the surrounding page chrome if needed.
+  const handleWheel = (e: React.WheelEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const delta = -e.deltaY * 0.003;
+    const nextScale = Math.max(1, Math.min(4, scaleRef.current + delta));
+    setScale(nextScale);
+    if (nextScale === 1) setOffset({ x: 0, y: 0 });
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -249,14 +426,25 @@ export function PhotoLightbox({
 
       {/* Photo */}
       <div
+        ref={imgWrapRef}
         className="max-w-full max-h-full p-4 flex flex-col items-center"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        style={{ touchAction: 'none' }}
+        onWheel={handleWheel}
       >
         <img
+          ref={imgRef}
           src={photo.dataUrl}
           alt={photo.caption || ''}
-          className="max-w-full max-h-[75vh] object-contain rounded-lg"
+          onClick={handleImageTap}
+          draggable={false}
+          className="max-w-full max-h-[75vh] object-contain rounded-lg select-none"
+          style={{
+            transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
+            transformOrigin: 'center center',
+            transition: isGesturing ? 'none' : 'transform 0.2s ease-out',
+            willChange: 'transform',
+            cursor: scale > 1 ? 'grab' : 'zoom-in',
+          }}
         />
 
         {/* Caption area */}
