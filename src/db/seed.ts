@@ -1,5 +1,6 @@
 import type { Venue } from '@/types';
 import { db } from './database';
+import { getAllShipNames, findShip } from './shipCatalog';
 
 // ─── Per-ship venue data ──────────────────────────────────────────────
 type VenueEntry = Omit<Venue, 'id'>;
@@ -158,14 +159,37 @@ function normalizeShipName(name: string): string {
   return name.toLowerCase().trim();
 }
 
-/** Get venue list for a ship. Falls back to empty if unknown ship. */
+/**
+ * Get venue list for a ship. Falls back to empty if unknown ship.
+ *
+ * Accepts either the canonical name ("NCL Prima") or a known alias
+ * ("Norwegian Prima") — the lookup first normalizes, and if no match is
+ * found in SHIP_VENUES, falls back to resolving the alias through the
+ * ship catalog.
+ */
 export function getVenuesForShip(shipName: string): Omit<VenueEntry, 'shipName'>[] {
-  return SHIP_VENUES[normalizeShipName(shipName)] ?? [];
+  const key = normalizeShipName(shipName);
+  const direct = SHIP_VENUES[key];
+  if (direct) return direct;
+  // Try to resolve alias via the catalog (e.g. "Norwegian Prima" → "NCL Prima").
+  const canonical = findShip(shipName);
+  if (canonical) {
+    const canonicalKey = normalizeShipName(canonical.name);
+    if (SHIP_VENUES[canonicalKey]) return SHIP_VENUES[canonicalKey];
+  }
+  return [];
 }
 
-/** Get list of all known ship names */
+/**
+ * Get list of all known ship names.
+ *
+ * Delegates to the ship catalog so the create-cruise dropdown and other
+ * ship-pickers always show the full fleet, not just the handful of ships
+ * that have seeded venue data. Ships without venues still work — the
+ * autocomplete just comes up empty.
+ */
 export function getKnownShips(): string[] {
-  return ['NCL Prima', 'Oasis of the Seas'];
+  return getAllShipNames();
 }
 
 export async function seedVenues() {

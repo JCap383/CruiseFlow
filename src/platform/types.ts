@@ -23,6 +23,8 @@ export interface PlatformDatabase {
   // Events
   getEventsForDay(cruiseId: string, date: string): Promise<CruiseEvent[]>;
   getAllCruiseEvents(cruiseId: string): Promise<CruiseEvent[]>;
+  /** Return every event across every cruise — used by the cross-cruise Memories view. */
+  getAllEvents(): Promise<CruiseEvent[]>;
   getEvent(id: string): Promise<CruiseEvent | undefined>;
   addEvent(event: Omit<CruiseEvent, 'id' | 'createdAt' | 'updatedAt'>): Promise<string>;
   updateEvent(id: string, changes: Partial<Omit<CruiseEvent, 'id' | 'createdAt'>>): Promise<void>;

@@ -273,6 +273,14 @@ const nativeDb: PlatformDatabase = {
     return (result.values || []).map(rowToEvent);
   },
 
+  async getAllEvents() {
+    const conn = await getDb();
+    const result = await conn.query(
+      'SELECT * FROM events ORDER BY date, startTime',
+    );
+    return (result.values || []).map(rowToEvent);
+  },
+
   async getEvent(id) {
     const conn = await getDb();
     const result = await conn.query('SELECT * FROM events WHERE id = ?', [id]);

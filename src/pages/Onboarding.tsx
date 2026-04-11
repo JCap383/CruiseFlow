@@ -15,11 +15,11 @@ import {
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Text } from '@/components/ui/Text';
+import { ShipPicker } from '@/components/ships/ShipPicker';
 import { createCruise } from '@/hooks/useCruise';
 import { addMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
 import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
-import { getKnownShips } from '@/db/seed';
 import { haptics } from '@/utils/haptics';
 
 type Step = 'welcome' | 'cruise' | 'members';
@@ -305,44 +305,17 @@ function CruiseStep({
           onChange={(e) => setCruiseName(e.target.value)}
         />
 
-        <Input
+        <ShipPicker
           id="shipName"
-          label="Ship name"
-          placeholder="e.g. NCL Prima"
+          label="Ship"
           value={shipName}
-          onChange={(e) => setShipName(e.target.value)}
-          hint="Selecting a known ship loads its venues automatically."
+          onChange={setShipName}
+          placeholder="Select a ship"
         />
-
-        {/* Popular ships */}
-        <div>
-          <div
-            className="text-caption font-semibold uppercase tracking-wider mb-2"
-            style={{ color: 'var(--fg-subtle)' }}
-          >
-            Popular ships
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {getKnownShips().map((name) => {
-              const selected = shipName === name;
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => setShipName(name)}
-                  className="text-footnote px-3 py-1.5 rounded-full press"
-                  style={{
-                    backgroundColor: selected ? 'var(--accent)' : 'var(--bg-card)',
-                    color: selected ? 'var(--accent-fg)' : 'var(--fg-muted)',
-                    border: `1px solid ${selected ? 'var(--accent)' : 'var(--border-default)'}`,
-                  }}
-                >
-                  {name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <Text variant="caption" tone="subtle" className="-mt-2 ml-1">
+          Ships are grouped by cruise line. Selecting a known ship loads its
+          venues automatically.
+        </Text>
 
         {/* Dates */}
         <div

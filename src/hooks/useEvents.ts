@@ -18,15 +18,26 @@ export function useEventsForDay(date?: string) {
   );
 }
 
-export function useAllCruiseEvents() {
+/**
+ * Return all events for a cruise.
+ *
+ * Defaults to the active cruise (preserving existing call sites), but callers
+ * can pass an explicit `cruiseId`:
+ *   - a string to scope to a specific cruise
+ *   - `'all'` to span every cruise (used by the cross-cruise Memories view)
+ *   - `null` to force an empty array (e.g. no active cruise)
+ */
+export function useAllCruiseEvents(cruiseId?: string | 'all' | null) {
   const activeCruiseId = useAppStore((s) => s.activeCruiseId);
+  const target = cruiseId === undefined ? activeCruiseId : cruiseId;
 
   return usePlatformQuery(
     () => {
-      if (!activeCruiseId) return Promise.resolve([]);
-      return platform.db.getAllCruiseEvents(activeCruiseId);
+      if (target === 'all') return platform.db.getAllEvents();
+      if (!target) return Promise.resolve([]);
+      return platform.db.getAllCruiseEvents(target);
     },
-    [activeCruiseId],
+    [target],
     [] as CruiseEvent[],
   );
 }
