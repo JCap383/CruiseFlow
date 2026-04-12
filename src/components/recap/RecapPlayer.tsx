@@ -31,6 +31,7 @@ interface RecapPlayerProps {
 const CARD_DURATION_MS = 5500;
 const TICK_MS = 60;
 const SWIPE_DISMISS_THRESHOLD = 90;
+const SWIPE_HORIZONTAL_THRESHOLD = 50;
 const HOLD_PAUSE_MS = 200;
 
 export function RecapPlayer({ cards, onClose }: RecapPlayerProps) {
@@ -196,15 +197,26 @@ export function RecapPlayer({ cards, onClose }: RecapPlayerProps) {
       return;
     }
 
-    if (!ref.moved) {
-      const t = e.changedTouches[0];
-      if (t) {
-        const el = e.currentTarget as HTMLElement;
-        const rect = el.getBoundingClientRect();
-        const relX = t.clientX - rect.left;
-        if (relX < rect.width * 0.33) goPrev();
-        else goNext();
+    const t = e.changedTouches[0];
+    if (ref.moved && t) {
+      // Horizontal swipe to navigate between cards
+      const dx = t.clientX - ref.x;
+      const dy = t.clientY - ref.y;
+      if (Math.abs(dx) > SWIPE_HORIZONTAL_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+        if (dx < 0) goNext();
+        else goPrev();
+        lastTouchEndAt.current = Date.now();
+        touchRef.current = null;
+        return;
       }
+    }
+
+    if (!ref.moved && t) {
+      const el = e.currentTarget as HTMLElement;
+      const rect = el.getBoundingClientRect();
+      const relX = t.clientX - rect.left;
+      if (relX < rect.width * 0.33) goPrev();
+      else goNext();
     }
 
     lastTouchEndAt.current = Date.now();
