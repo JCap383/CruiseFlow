@@ -27,10 +27,12 @@ import {
   Anchor,
   ArrowRightLeft,
   Pencil,
+  Eye as EyeIcon,
 } from 'lucide-react';
 import { useCruise, useCruises, updateCruise, deleteCruise } from '@/hooks/useCruise';
 import { ShipPicker } from '@/components/ships/ShipPicker';
 import { getCruiseLineForShip } from '@/db/shipCatalog';
+import { seedDemoCruise } from '@/data/seedDemoCruise';
 import {
   useFamily,
   addMember,
@@ -470,6 +472,17 @@ export function Settings() {
             title="New cruise"
             subtitle="Start planning another trip"
             onClick={handleNewCruise}
+          />
+          <ListRow
+            icon={<EyeIcon className="w-4 h-4" />}
+            title="Try demo cruise"
+            subtitle="Explore a pre-filled sample trip"
+            onClick={async () => {
+              const id = await seedDemoCruise();
+              setActiveCruise(id);
+              void haptics.success();
+              toast.success('Demo cruise loaded');
+            }}
           />
         </ListGroup>
 

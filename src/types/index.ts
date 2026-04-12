@@ -40,6 +40,11 @@ export interface Cruise {
    * field can be omitted from serialization when empty.
    */
   dailyBulletins?: Record<string, DailyBulletin>;
+  /**
+   * Marks this cruise as demo/sample data. Demo cruises are seeded from
+   * bundled content and display a dismissible banner. Introduced in #97.
+   */
+  isDemo?: boolean;
   createdAt: number;
 }
 

@@ -82,4 +82,16 @@ db.version(6).stores({
   });
 });
 
+// v7 (#97): add isDemo flag to cruises for demo cruise feature.
+db.version(7).stores({
+  cruises: 'id, startDate',
+  members: 'id, cruiseId',
+  events: 'id, cruiseId, date, startTime, [cruiseId+date]',
+  venues: 'id, shipName, deck, category, [shipName+category]',
+}).upgrade(async (tx) => {
+  await tx.table('cruises').toCollection().modify((cruise: Record<string, unknown>) => {
+    if (cruise.isDemo === undefined) cruise.isDemo = false;
+  });
+});
+
 export { db };

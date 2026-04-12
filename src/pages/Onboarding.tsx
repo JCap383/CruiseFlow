@@ -11,6 +11,7 @@ import {
   ArrowRight,
   ArrowLeft,
   Check,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -21,6 +22,7 @@ import { addMember } from '@/hooks/useFamily';
 import { useAppStore } from '@/stores/appStore';
 import { MEMBER_COLORS, MEMBER_EMOJIS } from '@/types';
 import { haptics } from '@/utils/haptics';
+import { seedDemoCruise } from '@/data/seedDemoCruise';
 
 type Step = 'welcome' | 'cruise' | 'members';
 
@@ -195,6 +197,22 @@ export function Onboarding() {
 }
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const navigate = useNavigate();
+  const setActiveCruise = useAppStore((s) => s.setActiveCruise);
+  const [loadingDemo, setLoadingDemo] = useState(false);
+
+  const handleTryDemo = async () => {
+    setLoadingDemo(true);
+    try {
+      const cruiseId = await seedDemoCruise();
+      setActiveCruise(cruiseId);
+      void haptics.success();
+      navigate('/');
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-center animate-fade-slide-up">
       {/* Hero */}
@@ -256,8 +274,25 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
         trailingIcon={<ArrowRight className="w-4 h-4" />}
         className="mt-10 max-w-xs"
       >
-        Get Started
+        Plan My Cruise
       </Button>
+
+      <button
+        type="button"
+        onClick={handleTryDemo}
+        disabled={loadingDemo}
+        className="mt-4 flex items-center justify-center gap-2 py-3 px-6 rounded-2xl w-full max-w-xs press disabled:opacity-60"
+        style={{
+          background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+          color: '#fff',
+          border: 'none',
+        }}
+      >
+        <Eye className="w-4 h-4" />
+        <span className="text-callout font-semibold">
+          {loadingDemo ? 'Loading demo…' : 'Try a Demo First'}
+        </span>
+      </button>
     </div>
   );
 }
